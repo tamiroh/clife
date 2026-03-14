@@ -1,5 +1,5 @@
 module TerminalUI
-  ( animateGenerations
+  ( animateGenerations,
   )
 where
 
@@ -8,7 +8,7 @@ import Control.Exception (finally)
 import GameOfLife (Board, Cell, isAlive, nextGeneration)
 import System.IO
   ( hFlush,
-    stdout
+    stdout,
   )
 import TerminalControl
   ( Direction (..),
@@ -17,7 +17,7 @@ import TerminalControl
     moveCursorHome,
     readArrowKey,
     showCursor,
-    withRawTerminalInput
+    withRawTerminalInput,
   )
 
 viewportWidth :: Int

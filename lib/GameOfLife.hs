@@ -3,7 +3,7 @@ module GameOfLife
     Board (..),
     isAlive,
     makeBoard,
-    nextGeneration
+    nextGeneration,
   )
 where
 

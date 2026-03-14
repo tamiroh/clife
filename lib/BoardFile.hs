@@ -2,7 +2,7 @@
 
 module BoardFile
   ( loadBoard,
-    parseBoard
+    parseBoard,
   )
 where
 

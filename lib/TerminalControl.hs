@@ -5,7 +5,7 @@ module TerminalControl
     hideCursor,
     showCursor,
     withRawTerminalInput,
-    readArrowKey
+    readArrowKey,
   )
 where
 
@@ -17,7 +17,7 @@ import System.IO
     hReady,
     hSetBuffering,
     hSetEcho,
-    stdin
+    stdin,
   )
 
 data Direction

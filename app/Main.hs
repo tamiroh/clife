@@ -1,8 +1,8 @@
 module Main where
 
 import BoardFile (loadBoard)
-import TerminalUI (animateGenerations)
 import System.Environment (getArgs)
+import TerminalUI (animateGenerations)
 
 main :: IO ()
 main = do
