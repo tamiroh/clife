@@ -7,15 +7,17 @@ import Control.Concurrent (threadDelay)
 import Control.Exception (finally)
 import GameOfLife (Board, Cell, isAlive, nextGeneration)
 import System.IO
-  ( BufferMode (NoBuffering),
-    hFlush,
-    hGetBuffering,
-    hGetEcho,
-    hReady,
-    hSetBuffering,
-    hSetEcho,
-    stdin,
+  ( hFlush,
     stdout
+  )
+import TerminalControl
+  ( Direction (..),
+    clearConsole,
+    hideCursor,
+    moveCursorHome,
+    readArrowKey,
+    showCursor,
+    withRawTerminalInput
   )
 
 viewportWidth :: Int
@@ -49,30 +51,12 @@ showBoard board viewportOrigin cursor =
     bottomBorder = topBorder
     showRow y = "|" ++ concat [showCell board viewportOrigin cursor (x, y) | x <- [0 .. viewportWidth - 1]] ++ "|"
 
-clearConsole :: IO ()
-clearConsole = putStr "\ESC[2J\ESC[H"
-
-moveCursorHome :: IO ()
-moveCursorHome = putStr "\ESC[H"
-
-hideCursor :: IO ()
-hideCursor = putStr "\ESC[?25l"
-
-showCursor :: IO ()
-showCursor = putStr "\ESC[?25h"
-
 animateGenerations :: Maybe Int -> Int -> Board -> IO ()
 animateGenerations generationLimit delayInMicroseconds board = do
   clearConsole
-  originalBuffering <- hGetBuffering stdin
-  originalEcho <- hGetEcho stdin
-  hSetBuffering stdin NoBuffering
-  hSetEcho stdin False
-  (hideCursor >> runLoop generationLimit delayInMicroseconds 0 (0, 0) (0, 0) board)
-    `finally` do
-      showCursor
-      hSetEcho stdin originalEcho
-      hSetBuffering stdin originalBuffering
+  withRawTerminalInput $
+    (hideCursor >> runLoop generationLimit delayInMicroseconds 0 (0, 0) (0, 0) board)
+      `finally` showCursor
 
 runLoop :: Maybe Int -> Int -> Int -> Cell -> Cell -> Board -> IO ()
 runLoop generationLimit delayInMicroseconds generation viewportOrigin cursor currentBoard = do
@@ -109,35 +93,6 @@ getNextViewState viewportOrigin cursor = do
           Just direction -> applyDirection viewportOrigin cursor direction
           Nothing -> (viewportOrigin, cursor)
   pure (nextViewportOrigin, nextCursor)
-
-data Direction
-  = MoveUp
-  | MoveDown
-  | MoveLeft
-  | MoveRight
-
-readArrowKey :: IO (Maybe Direction)
-readArrowKey = do
-  maybeFirst <- readCharIfReady
-  case maybeFirst of
-    Just '\ESC' -> do
-      maybeSecond <- readCharIfReady
-      maybeThird <- readCharIfReady
-      pure $
-        case (maybeSecond, maybeThird) of
-          (Just '[', Just 'A') -> Just MoveUp
-          (Just '[', Just 'B') -> Just MoveDown
-          (Just '[', Just 'C') -> Just MoveRight
-          (Just '[', Just 'D') -> Just MoveLeft
-          _ -> Nothing
-    _ -> pure Nothing
-
-readCharIfReady :: IO (Maybe Char)
-readCharIfReady = do
-  ready <- hReady stdin
-  if ready
-    then Just <$> getChar
-    else pure Nothing
 
 moveCursor :: Cell -> Direction -> Cell
 moveCursor (x, y) direction =

@@ -21,7 +21,8 @@ library
         BoardFile
         GameOfLife
         TerminalUI
-    -- other-modules:
+    other-modules:
+        TerminalControl
     -- other-extensions:
     build-depends:
         aeson,
