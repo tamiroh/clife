@@ -27,11 +27,11 @@ viewportWidth = 40
 viewportHeight :: Int
 viewportHeight = 20
 
-minimapWidth :: Int
-minimapWidth = 20
+maxMiniMapWidth :: Int
+maxMiniMapWidth = 20
 
-minimapHeight :: Int
-minimapHeight = 10
+maxMiniMapHeight :: Int
+maxMiniMapHeight = 10
 
 viewportCells :: Cell -> [Cell]
 viewportCells (viewportX, viewportY) =
@@ -67,13 +67,14 @@ showBoardLines board viewportOrigin cursor =
 showMiniMapLines :: Board -> Cell -> [String]
 showMiniMapLines board viewportOrigin
   | Set.null (liveCells board) = ["(empty)"]
-  | otherwise = [showMiniMapRow y | y <- [0 .. minimapHeight - 1]]
+  | otherwise = [showMiniMapRow y | y <- [0 .. miniMapHeight - 1]]
   where
     boardCells = Set.toList (liveCells board)
     ((minX, minY), (spanX, spanY)) = miniMapBounds boardCells viewportOrigin
+    (miniMapWidth, miniMapHeight) = miniMapSize spanX spanY
     scaleCell (x, y) =
-      ( scaleCoordinate x minX spanX minimapWidth,
-        scaleCoordinate y minY spanY minimapHeight
+      ( scaleCoordinate x minX spanX miniMapWidth,
+        scaleCoordinate y minY spanY miniMapHeight
       )
     scaledCells =
       Set.fromList (map scaleCell boardCells)
@@ -81,7 +82,7 @@ showMiniMapLines board viewportOrigin
       Set.fromList (map scaleCell (viewportCells viewportOrigin))
     showMiniMapRow y =
       [ showMiniMapCell x y scaledCells scaledViewportCells
-      | x <- [0 .. minimapWidth - 1]
+      | x <- [0 .. miniMapWidth - 1]
       ]
 
 showMiniMapCell :: Int -> Int -> Set.Set Cell -> Set.Set Cell -> Char
@@ -108,6 +109,17 @@ miniMapBounds boardCells (viewportX, viewportY) =
 scaleCoordinate :: Int -> Int -> Int -> Int -> Int
 scaleCoordinate value minValue spanValue targetSize =
   ((value - minValue) * max 0 (targetSize - 1)) `div` spanValue
+
+miniMapSize :: Int -> Int -> (Int, Int)
+miniMapSize spanX spanY
+  | spanX * maxMiniMapHeight >= spanY * maxMiniMapWidth =
+      (maxMiniMapWidth, max 1 (ceilingDiv (spanY * maxMiniMapWidth) spanX))
+  | otherwise =
+      (max 1 (ceilingDiv (spanX * maxMiniMapHeight) spanY), maxMiniMapHeight)
+
+ceilingDiv :: Int -> Int -> Int
+ceilingDiv numerator denominator =
+  (numerator + denominator - 1) `div` denominator
 
 padLines :: Int -> [String] -> [String]
 padLines targetLength rows =
