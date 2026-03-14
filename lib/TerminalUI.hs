@@ -54,6 +54,9 @@ showCell board viewportOrigin cursor cell
 highlight :: String -> String
 highlight contents = "\ESC[7m" ++ contents ++ "\ESC[0m"
 
+highlightMiniMap :: String -> String
+highlightMiniMap contents = "\ESC[48;5;238m" ++ contents ++ "\ESC[0m"
+
 showBoardLines :: Board -> Cell -> Cell -> [String]
 showBoardLines board viewportOrigin cursor =
   [topBorder]
@@ -81,15 +84,19 @@ showMiniMapLines board viewportOrigin
     scaledViewportCells =
       Set.fromList (map scaleCell (viewportCells viewportOrigin))
     showMiniMapRow y =
-      [ showMiniMapCell x y scaledCells scaledViewportCells
-      | x <- [0 .. miniMapWidth - 1]
-      ]
+      concat
+        [ showMiniMapCell x y scaledCells scaledViewportCells
+        | x <- [0 .. miniMapWidth - 1]
+        ]
 
-showMiniMapCell :: Int -> Int -> Set.Set Cell -> Set.Set Cell -> Char
+showMiniMapCell :: Int -> Int -> Set.Set Cell -> Set.Set Cell -> String
 showMiniMapCell x y scaledCells scaledViewportCells
-  | (x, y) `Set.member` scaledCells = '#'
-  | (x, y) `Set.member` scaledViewportCells = '+'
-  | otherwise = '.'
+  | (x, y) `Set.member` scaledViewportCells = highlightMiniMap contents
+  | otherwise = contents
+  where
+    contents
+      | (x, y) `Set.member` scaledCells = "#"
+      | otherwise = "."
 
 miniMapBounds :: [Cell] -> Cell -> (Cell, Cell)
 miniMapBounds boardCells (viewportX, viewportY) =
