@@ -33,6 +33,13 @@ minimapWidth = 20
 minimapHeight :: Int
 minimapHeight = 10
 
+viewportCells :: Cell -> [Cell]
+viewportCells (viewportX, viewportY) =
+  [ (x, y)
+  | x <- [viewportX .. viewportX + viewportWidth - 1],
+    y <- [viewportY .. viewportY + viewportHeight - 1]
+  ]
+
 showCell :: Board -> Cell -> Cell -> Cell -> String
 showCell board viewportOrigin cursor cell
   | (originX + x, originY + y) == cursor = highlight contents
@@ -57,31 +64,46 @@ showBoardLines board viewportOrigin cursor =
     bottomBorder = topBorder
     showRow y = "|" ++ concat [showCell board viewportOrigin cursor (x, y) | x <- [0 .. viewportWidth - 1]] ++ "|"
 
-showMiniMapLines :: Board -> [String]
-showMiniMapLines board
+showMiniMapLines :: Board -> Cell -> [String]
+showMiniMapLines board viewportOrigin
   | Set.null (liveCells board) = ["(empty)"]
   | otherwise = [showMiniMapRow y | y <- [0 .. minimapHeight - 1]]
   where
     boardCells = Set.toList (liveCells board)
-    xs = map fst boardCells
-    ys = map snd boardCells
-    minX = minimum xs
-    maxX = maximum xs
-    minY = minimum ys
-    maxY = maximum ys
-    spanX = max 1 (maxX - minX + 1)
-    spanY = max 1 (maxY - minY + 1)
+    ((minX, minY), (spanX, spanY)) = miniMapBounds boardCells viewportOrigin
+    scaleCell (x, y) =
+      ( scaleCoordinate x minX spanX minimapWidth,
+        scaleCoordinate y minY spanY minimapHeight
+      )
     scaledCells =
-      Set.fromList
-        [ ( scaleCoordinate x minX spanX minimapWidth,
-            scaleCoordinate y minY spanY minimapHeight
-          )
-        | (x, y) <- boardCells
-        ]
+      Set.fromList (map scaleCell boardCells)
+    scaledViewportCells =
+      Set.fromList (map scaleCell (viewportCells viewportOrigin))
     showMiniMapRow y =
-      [ if (x, y) `Set.member` scaledCells then '#' else '.'
+      [ showMiniMapCell x y scaledCells scaledViewportCells
       | x <- [0 .. minimapWidth - 1]
       ]
+
+showMiniMapCell :: Int -> Int -> Set.Set Cell -> Set.Set Cell -> Char
+showMiniMapCell x y scaledCells scaledViewportCells
+  | (x, y) `Set.member` scaledCells = '#'
+  | (x, y) `Set.member` scaledViewportCells = '+'
+  | otherwise = '.'
+
+miniMapBounds :: [Cell] -> Cell -> (Cell, Cell)
+miniMapBounds boardCells (viewportX, viewportY) =
+  ((minX, minY), (spanX, spanY))
+  where
+    xs = viewportX : map fst boardCells
+    ys = viewportY : map snd boardCells
+    maxXs = (viewportX + viewportWidth - 1) : xs
+    maxYs = (viewportY + viewportHeight - 1) : ys
+    minX = minimum xs
+    minY = minimum ys
+    maxX = maximum maxXs
+    maxY = maximum maxYs
+    spanX = max 1 (maxX - minX + 1)
+    spanY = max 1 (maxY - minY + 1)
 
 scaleCoordinate :: Int -> Int -> Int -> Int -> Int
 scaleCoordinate value minValue spanValue targetSize =
@@ -100,7 +122,7 @@ showLayout board viewportOrigin cursor =
       paddedMiniMapLines
   where
     boardLines = showBoardLines board viewportOrigin cursor
-    miniMapLines = "Mini-map:" : showMiniMapLines board
+    miniMapLines = "Mini-map:" : showMiniMapLines board viewportOrigin
     totalRows = max (length boardLines) (length miniMapLines)
     paddedBoardLines = padLines totalRows boardLines
     paddedMiniMapLines = padLines totalRows miniMapLines
@@ -143,9 +165,7 @@ getNextViewState :: Cell -> Cell -> IO (Cell, Cell)
 getNextViewState viewportOrigin cursor = do
   maybeDirection <- readArrowKey
   let (nextViewportOrigin, nextCursor) =
-        case maybeDirection of
-          Just direction -> applyDirection viewportOrigin cursor direction
-          Nothing -> (viewportOrigin, cursor)
+        maybe (viewportOrigin, cursor) (applyDirection viewportOrigin cursor) maybeDirection
   pure (nextViewportOrigin, nextCursor)
 
 moveCursor :: Cell -> Direction -> Cell
@@ -162,10 +182,12 @@ applyDirection viewportOrigin cursor direction =
   where
     nextCursor = moveCursor cursor direction
     nextViewportOrigin = adjustViewportOrigin viewportOrigin nextCursor
-    adjustViewportOrigin (originX, originY) (cursorX, cursorY) =
-      (adjust originX cursorX viewportWidth, adjust originY cursorY viewportHeight)
-      where
-        adjust origin cursorCoord viewportSize
-          | cursorCoord < origin = cursorCoord
-          | cursorCoord >= origin + viewportSize = cursorCoord - viewportSize + 1
-          | otherwise = origin
+
+adjustViewportOrigin :: Cell -> Cell -> Cell
+adjustViewportOrigin (originX, originY) (cursorX, cursorY) =
+  (adjust originX cursorX viewportWidth, adjust originY cursorY viewportHeight)
+  where
+    adjust origin cursorCoord viewportSize
+      | cursorCoord < origin = cursorCoord
+      | cursorCoord >= origin + viewportSize = cursorCoord - viewportSize + 1
+      | otherwise = origin
