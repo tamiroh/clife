@@ -162,6 +162,7 @@ runLoop generationLimit delayInMicroseconds isRunning generation viewportOrigin 
   putStrLn $ "Generation " ++ show generation
   putStrLn $ "Status: " ++ if isRunning then "running" else "paused"
   putStrLn $ showLayout currentBoard viewportOrigin cursor
+  putStrLn "  [Arrow keys] Move cursor  [Space] Run / Pause"
   hFlush stdout
   (nextViewportOrigin, nextCursor, nextIsRunning) <- waitForNextFrame delayInMicroseconds isRunning viewportOrigin cursor
   case generationLimit of
