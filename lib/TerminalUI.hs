@@ -4,12 +4,12 @@ module TerminalUI
 where
 
 import Control.Concurrent (threadDelay)
-import GameOfLife (Board, Cell, cells, height, nextGeneration, width)
+import GameOfLife (Board, Cell, height, isAlive, nextGeneration, width)
 import System.IO (hFlush, stdout)
 
 showCell :: Board -> Cell -> String
 showCell board cell
-  | cell `elem` cells board = "██"
+  | isAlive board cell = "██"
   | otherwise = "  "
 
 showBoard :: Board -> String

@@ -7,14 +7,14 @@ module GameOfLife
   )
 where
 
-import Data.List (nub)
+import qualified Data.Set as Set
 
 type Cell = (Int, Int)
 
 data Board = Board
   { width :: Int,
     height :: Int,
-    cells :: [Cell]
+    liveCells :: Set.Set Cell
   }
 
 makeBoard :: Int -> Int -> [Cell] -> Maybe Board
@@ -26,7 +26,7 @@ makeBoard boardWidth boardHeight boardCells
         Board
           { width = boardWidth,
             height = boardHeight,
-            cells = boardCells
+            liveCells = Set.fromList boardCells
           }
   | otherwise = Nothing
   where
@@ -46,27 +46,34 @@ neighbors (x, y) =
   ]
 
 isAlive :: Board -> Cell -> Bool
-isAlive board targetCell = targetCell `elem` cells board
+isAlive board targetCell = targetCell `Set.member` liveCells board
 
 liveNeighbors :: Board -> Cell -> Int
 liveNeighbors board cell =
   length [neighbor | neighbor <- neighbors cell, isAlive board neighbor]
 
-survivors :: Board -> [Cell]
+survivors :: Board -> Set.Set Cell
 survivors board =
-  [cell | cell <- cells board, let n = liveNeighbors board cell, n == 2 || n == 3]
+  Set.filter survives (liveCells board)
+  where
+    survives cell =
+      let n = liveNeighbors board cell
+       in n == 2 || n == 3
 
-births :: Board -> [Cell]
+births :: Board -> Set.Set Cell
 births board =
-  [ cell
-  | cell <- nub [neighbor | livingCell <- cells board, neighbor <- neighbors livingCell]
-  , not (isAlive board cell)
-  , let n = liveNeighbors board cell
-  , n == 3
-  ]
+  Set.filter isBirthCell (birthCandidates `Set.difference` liveCells board)
+  where
+    birthCandidates =
+      Set.fromList
+        [ neighbor
+        | livingCell <- Set.toList (liveCells board),
+          neighbor <- neighbors livingCell
+        ]
+    isBirthCell cell = liveNeighbors board cell == 3
 
 nextGeneration :: Board -> Board
 nextGeneration board =
   board
-    { cells = survivors board ++ births board
+    { liveCells = survivors board `Set.union` births board
     }
