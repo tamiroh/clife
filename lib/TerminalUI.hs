@@ -61,10 +61,13 @@ showCell board viewportOrigin cursor cell
   | otherwise = contents
   where
     contents
-      | isAlive board (originX + x, originY + y) = "██"
+      | isAlive board (originX + x, originY + y) = liveCell "██"
       | otherwise = "  "
     (originX, originY) = viewportOrigin
     (x, y) = cell
+
+liveCell :: String -> String
+liveCell contents = "\ESC[38;5;72m" ++ contents ++ "\ESC[0m"
 
 highlight :: String -> String
 highlight contents = "\ESC[7m" ++ contents ++ "\ESC[0m"
@@ -110,7 +113,7 @@ showMiniMapCell x y scaledCells scaledViewportCells
   | otherwise = contents
   where
     contents
-      | (x, y) `Set.member` scaledCells = "#"
+      | (x, y) `Set.member` scaledCells = liveCell "#"
       | otherwise = "."
 
 miniMapBounds :: [Cell] -> Cell -> (Cell, Cell)
