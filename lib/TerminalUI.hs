@@ -5,7 +5,8 @@ where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (finally)
-import GameOfLife (Board, Cell, isAlive, nextGeneration)
+import GameOfLife (Board (..), Cell, isAlive, nextGeneration)
+import qualified Data.Set as Set
 import System.IO
   ( hFlush,
     stdout,
@@ -26,6 +27,12 @@ viewportWidth = 40
 viewportHeight :: Int
 viewportHeight = 20
 
+minimapWidth :: Int
+minimapWidth = 20
+
+minimapHeight :: Int
+minimapHeight = 10
+
 showCell :: Board -> Cell -> Cell -> Cell -> String
 showCell board viewportOrigin cursor cell
   | (originX + x, originY + y) == cursor = highlight contents
@@ -40,16 +47,63 @@ showCell board viewportOrigin cursor cell
 highlight :: String -> String
 highlight contents = "\ESC[7m" ++ contents ++ "\ESC[0m"
 
-showBoard :: Board -> Cell -> Cell -> String
-showBoard board viewportOrigin cursor =
-  unlines $
-    [topBorder]
-      ++ [showRow y | y <- [0 .. viewportHeight - 1]]
-      ++ [bottomBorder]
+showBoardLines :: Board -> Cell -> Cell -> [String]
+showBoardLines board viewportOrigin cursor =
+  [topBorder]
+    ++ [showRow y | y <- [0 .. viewportHeight - 1]]
+    ++ [bottomBorder]
   where
     topBorder = "+" ++ replicate (viewportWidth * 2) '-' ++ "+"
     bottomBorder = topBorder
     showRow y = "|" ++ concat [showCell board viewportOrigin cursor (x, y) | x <- [0 .. viewportWidth - 1]] ++ "|"
+
+showMiniMapLines :: Board -> [String]
+showMiniMapLines board
+  | Set.null (liveCells board) = ["(empty)"]
+  | otherwise = [showMiniMapRow y | y <- [0 .. minimapHeight - 1]]
+  where
+    boardCells = Set.toList (liveCells board)
+    xs = map fst boardCells
+    ys = map snd boardCells
+    minX = minimum xs
+    maxX = maximum xs
+    minY = minimum ys
+    maxY = maximum ys
+    spanX = max 1 (maxX - minX + 1)
+    spanY = max 1 (maxY - minY + 1)
+    scaledCells =
+      Set.fromList
+        [ ( scaleCoordinate x minX spanX minimapWidth,
+            scaleCoordinate y minY spanY minimapHeight
+          )
+        | (x, y) <- boardCells
+        ]
+    showMiniMapRow y =
+      [ if (x, y) `Set.member` scaledCells then '#' else '.'
+      | x <- [0 .. minimapWidth - 1]
+      ]
+
+scaleCoordinate :: Int -> Int -> Int -> Int -> Int
+scaleCoordinate value minValue spanValue targetSize =
+  ((value - minValue) * max 0 (targetSize - 1)) `div` spanValue
+
+padLines :: Int -> [String] -> [String]
+padLines targetLength rows =
+  rows ++ replicate (targetLength - length rows) ""
+
+showLayout :: Board -> Cell -> Cell -> String
+showLayout board viewportOrigin cursor =
+  unlines $
+    zipWith
+      (\boardRow miniMapRow -> boardRow ++ "    " ++ miniMapRow)
+      paddedBoardLines
+      paddedMiniMapLines
+  where
+    boardLines = showBoardLines board viewportOrigin cursor
+    miniMapLines = "Mini-map:" : showMiniMapLines board
+    totalRows = max (length boardLines) (length miniMapLines)
+    paddedBoardLines = padLines totalRows boardLines
+    paddedMiniMapLines = padLines totalRows miniMapLines
 
 animateGenerations :: Maybe Int -> Int -> Board -> IO ()
 animateGenerations generationLimit delayInMicroseconds board = do
@@ -70,7 +124,7 @@ runLoop generationLimit delayInMicroseconds generation viewportOrigin cursor cur
       ++ " @ "
       ++ show viewportOrigin
   putStrLn $ "Cursor: " ++ show cursor
-  putStrLn $ showBoard currentBoard viewportOrigin cursor
+  putStrLn $ showLayout currentBoard viewportOrigin cursor
   hFlush stdout
   (nextViewportOrigin, nextCursor) <- waitForNextFrame delayInMicroseconds viewportOrigin cursor
   case generationLimit of
