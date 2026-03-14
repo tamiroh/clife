@@ -1,6 +1,7 @@
 module GameOfLife
   ( Cell,
     Board (..),
+    isAlive,
     makeBoard,
     nextGeneration
   )
@@ -44,16 +45,8 @@ neighbors (x, y) =
     (x + 1, y + 1)
   ]
 
-containsCell :: Board -> Cell -> Bool
-containsCell board = containsInCells (cells board)
-  where
-    containsInCells [] _ = False
-    containsInCells (cell : rest) targetCell
-      | targetCell == cell = True
-      | otherwise = containsInCells rest targetCell
-
 isAlive :: Board -> Cell -> Bool
-isAlive = containsCell
+isAlive board targetCell = targetCell `elem` cells board
 
 liveNeighbors :: Board -> Cell -> Int
 liveNeighbors board cell =
