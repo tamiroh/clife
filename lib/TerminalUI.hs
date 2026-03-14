@@ -5,8 +5,8 @@ where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (finally)
-import GameOfLife (Board (..), Cell, isAlive, nextGeneration)
 import qualified Data.Set as Set
+import GameOfLife (Board (..), Cell, isAlive, nextGeneration)
 import System.IO
   ( hFlush,
     stdout,
