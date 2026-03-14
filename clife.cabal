@@ -20,7 +20,6 @@ library
     exposed-modules:
         BoardFile
         GameOfLife
-        MyLib
         TerminalUI
     -- other-modules:
     -- other-extensions:
