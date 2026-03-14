@@ -13,10 +13,12 @@ import System.IO
   )
 import TerminalControl
   ( Direction (..),
+    Input (..),
     clearConsole,
+    clearFromCursorDown,
     hideCursor,
     moveCursorHome,
-    readArrowKey,
+    readInput,
     showCursor,
     withRawTerminalInput,
   )
@@ -150,34 +152,48 @@ animateGenerations :: Maybe Int -> Int -> Board -> IO ()
 animateGenerations generationLimit delayInMicroseconds board = do
   clearConsole
   withRawTerminalInput $
-    (hideCursor >> runLoop generationLimit delayInMicroseconds 0 (0, 0) (0, 0) board)
+    (hideCursor >> runLoop generationLimit delayInMicroseconds True 0 (0, 0) (0, 0) board)
       `finally` showCursor
 
-runLoop :: Maybe Int -> Int -> Int -> Cell -> Cell -> Board -> IO ()
-runLoop generationLimit delayInMicroseconds generation viewportOrigin cursor currentBoard = do
+runLoop :: Maybe Int -> Int -> Bool -> Int -> Cell -> Cell -> Board -> IO ()
+runLoop generationLimit delayInMicroseconds isRunning generation viewportOrigin cursor currentBoard = do
   moveCursorHome
+  clearFromCursorDown
   putStrLn $ "Generation " ++ show generation
+  putStrLn $ "Status: " ++ if isRunning then "running" else "paused"
   putStrLn $ showLayout currentBoard viewportOrigin cursor
   hFlush stdout
-  (nextViewportOrigin, nextCursor) <- waitForNextFrame delayInMicroseconds viewportOrigin cursor
+  (nextViewportOrigin, nextCursor, nextIsRunning) <- waitForNextFrame delayInMicroseconds isRunning viewportOrigin cursor
   case generationLimit of
     Just count | generation >= count -> pure ()
-    _ -> runLoop generationLimit delayInMicroseconds (generation + 1) nextViewportOrigin nextCursor (nextGeneration currentBoard)
+    _ ->
+      runLoop
+        generationLimit
+        delayInMicroseconds
+        nextIsRunning
+        (if nextIsRunning then generation + 1 else generation)
+        nextViewportOrigin
+        nextCursor
+        (if nextIsRunning then nextGeneration currentBoard else currentBoard)
 
-waitForNextFrame :: Int -> Cell -> Cell -> IO (Cell, Cell)
-waitForNextFrame remainingMicroseconds viewportOrigin cursor
-  | remainingMicroseconds <= 0 = pure (viewportOrigin, cursor)
+waitForNextFrame :: Int -> Bool -> Cell -> Cell -> IO (Cell, Cell, Bool)
+waitForNextFrame remainingMicroseconds isRunning viewportOrigin cursor
+  | remainingMicroseconds <= 0 = pure (viewportOrigin, cursor, isRunning)
   | otherwise = do
-      (nextViewportOrigin, nextCursor) <- getNextViewState viewportOrigin cursor
+      (nextViewportOrigin, nextCursor, nextIsRunning) <- getNextViewState isRunning viewportOrigin cursor
       threadDelay (min 10000 remainingMicroseconds)
-      waitForNextFrame (remainingMicroseconds - min 10000 remainingMicroseconds) nextViewportOrigin nextCursor
+      waitForNextFrame (remainingMicroseconds - min 10000 remainingMicroseconds) nextIsRunning nextViewportOrigin nextCursor
 
-getNextViewState :: Cell -> Cell -> IO (Cell, Cell)
-getNextViewState viewportOrigin cursor = do
-  maybeDirection <- readArrowKey
-  let (nextViewportOrigin, nextCursor) =
-        maybe (viewportOrigin, cursor) (applyDirection viewportOrigin cursor) maybeDirection
-  pure (nextViewportOrigin, nextCursor)
+getNextViewState :: Bool -> Cell -> Cell -> IO (Cell, Cell, Bool)
+getNextViewState isRunning viewportOrigin cursor = do
+  maybeInput <- readInput
+  pure $
+    case maybeInput of
+      Just (MoveCursor direction) ->
+        let (nextViewportOrigin, nextCursor) = applyDirection viewportOrigin cursor direction
+         in (nextViewportOrigin, nextCursor, isRunning)
+      Just ToggleRunning -> (viewportOrigin, cursor, not isRunning)
+      Nothing -> (viewportOrigin, cursor, isRunning)
 
 moveCursor :: Cell -> Direction -> Cell
 moveCursor (x, y) direction =

@@ -1,11 +1,13 @@
 module TerminalControl
   ( Direction (..),
+    Input (..),
     clearConsole,
+    clearFromCursorDown,
     moveCursorHome,
     hideCursor,
     showCursor,
     withRawTerminalInput,
-    readArrowKey,
+    readInput,
   )
 where
 
@@ -26,8 +28,15 @@ data Direction
   | MoveLeft
   | MoveRight
 
+data Input
+  = MoveCursor Direction
+  | ToggleRunning
+
 clearConsole :: IO ()
 clearConsole = putStr "\ESC[2J\ESC[H"
+
+clearFromCursorDown :: IO ()
+clearFromCursorDown = putStr "\ESC[J"
 
 moveCursorHome :: IO ()
 moveCursorHome = putStr "\ESC[H"
@@ -48,19 +57,20 @@ withRawTerminalInput action = do
     hSetEcho stdin originalEcho
     hSetBuffering stdin originalBuffering
 
-readArrowKey :: IO (Maybe Direction)
-readArrowKey = do
+readInput :: IO (Maybe Input)
+readInput = do
   maybeFirst <- readCharIfReady
   case maybeFirst of
+    Just ' ' -> pure (Just ToggleRunning)
     Just '\ESC' -> do
       maybeSecond <- readCharIfReady
       maybeThird <- readCharIfReady
       pure $
         case (maybeSecond, maybeThird) of
-          (Just '[', Just 'A') -> Just MoveUp
-          (Just '[', Just 'B') -> Just MoveDown
-          (Just '[', Just 'C') -> Just MoveRight
-          (Just '[', Just 'D') -> Just MoveLeft
+          (Just '[', Just 'A') -> Just (MoveCursor MoveUp)
+          (Just '[', Just 'B') -> Just (MoveCursor MoveDown)
+          (Just '[', Just 'C') -> Just (MoveCursor MoveRight)
+          (Just '[', Just 'D') -> Just (MoveCursor MoveLeft)
           _ -> Nothing
     _ -> pure Nothing
 
