@@ -157,14 +157,6 @@ runLoop :: Maybe Int -> Int -> Int -> Cell -> Cell -> Board -> IO ()
 runLoop generationLimit delayInMicroseconds generation viewportOrigin cursor currentBoard = do
   moveCursorHome
   putStrLn $ "Generation " ++ show generation
-  putStrLn $
-    "Viewport: "
-      ++ show viewportWidth
-      ++ " x "
-      ++ show viewportHeight
-      ++ " @ "
-      ++ show viewportOrigin
-  putStrLn $ "Cursor: " ++ show cursor
   putStrLn $ showLayout currentBoard viewportOrigin cursor
   hFlush stdout
   (nextViewportOrigin, nextCursor) <- waitForNextFrame delayInMicroseconds viewportOrigin cursor
