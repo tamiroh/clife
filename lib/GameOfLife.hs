@@ -11,27 +11,15 @@ import qualified Data.Set as Set
 
 type Cell = (Int, Int)
 
-data Board = Board
-  { width :: Int,
-    height :: Int,
-    liveCells :: Set.Set Cell
+newtype Board = Board
+  { liveCells :: Set.Set Cell
   }
 
-makeBoard :: Int -> Int -> [Cell] -> Maybe Board
-makeBoard boardWidth boardHeight boardCells
-  | boardWidth <= 0 = Nothing
-  | boardHeight <= 0 = Nothing
-  | all inBounds boardCells =
-      Just
-        Board
-          { width = boardWidth,
-            height = boardHeight,
-            liveCells = Set.fromList boardCells
-          }
-  | otherwise = Nothing
-  where
-    inBounds (x, y) =
-      x >= 0 && x < boardWidth && y >= 0 && y < boardHeight
+makeBoard :: [Cell] -> Board
+makeBoard boardCells =
+  Board
+    { liveCells = Set.fromList boardCells
+    }
 
 neighbors :: Cell -> [Cell]
 neighbors (x, y) =

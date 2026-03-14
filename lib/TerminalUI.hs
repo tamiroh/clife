@@ -4,24 +4,33 @@ module TerminalUI
 where
 
 import Control.Concurrent (threadDelay)
-import GameOfLife (Board, Cell, height, isAlive, nextGeneration, width)
+import GameOfLife (Board, Cell, isAlive, nextGeneration)
 import System.IO (hFlush, stdout)
 
-showCell :: Board -> Cell -> String
-showCell board cell
-  | isAlive board cell = "██"
-  | otherwise = "  "
+viewportWidth :: Int
+viewportWidth = 40
 
-showBoard :: Board -> String
-showBoard board =
+viewportHeight :: Int
+viewportHeight = 20
+
+showCell :: Board -> Cell -> Cell -> String
+showCell board viewportOrigin cell
+  | isAlive board (originX + x, originY + y) = "██"
+  | otherwise = "  "
+  where
+    (originX, originY) = viewportOrigin
+    (x, y) = cell
+
+showBoard :: Board -> Cell -> String
+showBoard board viewportOrigin =
   unlines $
     [topBorder]
-      ++ [showRow y | y <- [0 .. height board - 1]]
+      ++ [showRow y | y <- [0 .. viewportHeight - 1]]
       ++ [bottomBorder]
   where
-    topBorder = "+" ++ replicate (width board * 2) '-' ++ "+"
+    topBorder = "+" ++ replicate (viewportWidth * 2) '-' ++ "+"
     bottomBorder = topBorder
-    showRow y = "|" ++ concat [showCell board (x, y) | x <- [0 .. width board - 1]] ++ "|"
+    showRow y = "|" ++ concat [showCell board viewportOrigin (x, y) | x <- [0 .. viewportWidth - 1]] ++ "|"
 
 clearConsole :: IO ()
 clearConsole = putStr "\ESC[2J\ESC[H"
@@ -50,7 +59,7 @@ animateGenerations generationLimit delayInMicroseconds board = do
     showGeneration (generation, currentBoard) = do
       moveCursorHome
       putStrLn $ "Generation " ++ show generation
-      putStrLn $ "Board: " ++ show (width currentBoard) ++ " x " ++ show (height currentBoard)
-      putStrLn $ showBoard currentBoard
+      putStrLn $ "Viewport: " ++ show viewportWidth ++ " x " ++ show viewportHeight
+      putStrLn $ showBoard currentBoard (0, 0)
       hFlush stdout
       threadDelay delayInMicroseconds
