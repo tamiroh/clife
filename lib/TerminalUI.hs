@@ -35,6 +35,19 @@ maxMiniMapWidth = 20
 maxMiniMapHeight :: Int
 maxMiniMapHeight = 10
 
+data ViewState = ViewState
+  { isRunning :: Bool,
+    generation :: Int,
+    viewViewportOrigin :: Cell,
+    viewCursor :: Cell,
+    viewBoard :: Board
+  }
+
+data RunConfiguration = RunConfiguration
+  { generationLimit :: Maybe Int,
+    delayInMicroseconds :: Int
+  }
+
 viewportCells :: Cell -> [Cell]
 viewportCells (viewportX, viewportY) =
   [ (x, y)
@@ -149,52 +162,56 @@ showLayout board viewportOrigin cursor =
     paddedMiniMapLines = padLines totalRows miniMapLines
 
 animateGenerations :: Maybe Int -> Int -> Board -> IO ()
-animateGenerations generationLimit delayInMicroseconds board = do
+animateGenerations maybeGenerationLimit frameDelayInMicroseconds board = do
   clearConsole
   withRawTerminalInput $
-    (hideCursor >> runLoop generationLimit delayInMicroseconds True 0 (0, 0) (0, 0) board)
+    (hideCursor >> runLoop runConfiguration initialViewState)
       `finally` showCursor
+  where
+    runConfiguration =
+      RunConfiguration
+        { generationLimit = maybeGenerationLimit,
+          delayInMicroseconds = frameDelayInMicroseconds
+        }
+    initialViewState =
+      ViewState
+        { isRunning = True,
+          generation = 0,
+          viewViewportOrigin = (0, 0),
+          viewCursor = (0, 0),
+          viewBoard = board
+        }
 
-runLoop :: Maybe Int -> Int -> Bool -> Int -> Cell -> Cell -> Board -> IO ()
-runLoop generationLimit delayInMicroseconds isRunning generation viewportOrigin cursor currentBoard = do
+runLoop :: RunConfiguration -> ViewState -> IO ()
+runLoop runConfiguration viewState = do
   moveCursorHome
   clearFromCursorDown
-  putStrLn $ "Generation " ++ show generation
-  putStrLn $ "Status: " ++ if isRunning then "running" else "paused"
-  putStrLn $ showLayout currentBoard viewportOrigin cursor
+  putStrLn $ "Generation " ++ show (generation viewState)
+  putStrLn $ "Status: " ++ if isRunning viewState then "running" else "paused"
+  putStrLn $ showLayout (viewBoard viewState) (viewViewportOrigin viewState) (viewCursor viewState)
   putStrLn "  [Arrow keys] Move cursor  [Space] Run / Pause"
   hFlush stdout
-  (nextViewportOrigin, nextCursor, nextIsRunning) <- waitForNextFrame delayInMicroseconds isRunning viewportOrigin cursor
-  case generationLimit of
-    Just count | generation >= count -> pure ()
-    _ ->
-      runLoop
-        generationLimit
-        delayInMicroseconds
-        nextIsRunning
-        (if nextIsRunning then generation + 1 else generation)
-        nextViewportOrigin
-        nextCursor
-        (if nextIsRunning then nextGeneration currentBoard else currentBoard)
+  nextViewState <- waitForNextFrame (delayInMicroseconds runConfiguration) viewState
+  case generationLimit runConfiguration of
+    Just count | generation viewState >= count -> pure ()
+    _ -> runLoop runConfiguration (advanceBoard nextViewState)
 
-waitForNextFrame :: Int -> Bool -> Cell -> Cell -> IO (Cell, Cell, Bool)
-waitForNextFrame remainingMicroseconds isRunning viewportOrigin cursor
-  | remainingMicroseconds <= 0 = pure (viewportOrigin, cursor, isRunning)
+waitForNextFrame :: Int -> ViewState -> IO ViewState
+waitForNextFrame remainingMicroseconds viewState
+  | remainingMicroseconds <= 0 = pure viewState
   | otherwise = do
-      (nextViewportOrigin, nextCursor, nextIsRunning) <- getNextViewState isRunning viewportOrigin cursor
+      nextViewState <- getNextViewState viewState
       threadDelay (min 10000 remainingMicroseconds)
-      waitForNextFrame (remainingMicroseconds - min 10000 remainingMicroseconds) nextIsRunning nextViewportOrigin nextCursor
+      waitForNextFrame (remainingMicroseconds - min 10000 remainingMicroseconds) nextViewState
 
-getNextViewState :: Bool -> Cell -> Cell -> IO (Cell, Cell, Bool)
-getNextViewState isRunning viewportOrigin cursor = do
+getNextViewState :: ViewState -> IO ViewState
+getNextViewState viewState = do
   maybeInput <- readInput
   pure $
     case maybeInput of
-      Just (MoveCursor direction) ->
-        let (nextViewportOrigin, nextCursor) = applyDirection viewportOrigin cursor direction
-         in (nextViewportOrigin, nextCursor, isRunning)
-      Just ToggleRunning -> (viewportOrigin, cursor, not isRunning)
-      Nothing -> (viewportOrigin, cursor, isRunning)
+      Just (MoveCursor direction) -> applyDirection viewState direction
+      Just ToggleRunning -> viewState {isRunning = not (isRunning viewState)}
+      Nothing -> viewState
 
 moveCursor :: Cell -> Direction -> Cell
 moveCursor (x, y) direction =
@@ -204,12 +221,24 @@ moveCursor (x, y) direction =
     MoveLeft -> (x - 1, y)
     MoveRight -> (x + 1, y)
 
-applyDirection :: Cell -> Cell -> Direction -> (Cell, Cell)
-applyDirection viewportOrigin cursor direction =
-  (nextViewportOrigin, nextCursor)
+applyDirection :: ViewState -> Direction -> ViewState
+applyDirection viewState direction =
+  viewState
+    { viewViewportOrigin = nextViewportOrigin,
+      viewCursor = nextCursor
+    }
   where
-    nextCursor = moveCursor cursor direction
-    nextViewportOrigin = adjustViewportOrigin viewportOrigin nextCursor
+    nextCursor = moveCursor (viewCursor viewState) direction
+    nextViewportOrigin = adjustViewportOrigin (viewViewportOrigin viewState) nextCursor
+
+advanceBoard :: ViewState -> ViewState
+advanceBoard viewState
+  | isRunning viewState =
+      viewState
+        { generation = generation viewState + 1,
+          viewBoard = nextGeneration (viewBoard viewState)
+        }
+  | otherwise = viewState
 
 adjustViewportOrigin :: Cell -> Cell -> Cell
 adjustViewportOrigin (originX, originY) (cursorX, cursorY) =
