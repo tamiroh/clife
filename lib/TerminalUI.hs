@@ -229,7 +229,13 @@ applyDirection viewState direction =
     }
   where
     nextCursor = moveCursor (viewCursor viewState) direction
-    nextViewportOrigin = adjustViewportOrigin (viewViewportOrigin viewState) nextCursor
+    nextViewportOrigin = (adjust originX cursorX viewportWidth, adjust originY cursorY viewportHeight)
+    (originX, originY) = viewViewportOrigin viewState
+    (cursorX, cursorY) = nextCursor
+    adjust origin cursorCoord viewportSize
+      | cursorCoord < origin = cursorCoord
+      | cursorCoord >= origin + viewportSize = cursorCoord - viewportSize + 1
+      | otherwise = origin
 
 advanceBoard :: ViewState -> ViewState
 advanceBoard viewState
@@ -239,12 +245,3 @@ advanceBoard viewState
           viewBoard = nextGeneration (viewBoard viewState)
         }
   | otherwise = viewState
-
-adjustViewportOrigin :: Cell -> Cell -> Cell
-adjustViewportOrigin (originX, originY) (cursorX, cursorY) =
-  (adjust originX cursorX viewportWidth, adjust originY cursorY viewportHeight)
-  where
-    adjust origin cursorCoord viewportSize
-      | cursorCoord < origin = cursorCoord
-      | cursorCoord >= origin + viewportSize = cursorCoord - viewportSize + 1
-      | otherwise = origin
