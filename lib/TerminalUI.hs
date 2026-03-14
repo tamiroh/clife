@@ -192,29 +192,34 @@ runLoop runConfiguration viewState = do
   putStrLn $ "Generation " ++ show (generation viewState)
   putStrLn $ "Status: " ++ if isRunning viewState then "running" else "paused"
   putStrLn $ showLayout (viewBoard viewState) (viewViewportOrigin viewState) (viewCursor viewState)
-  putStrLn "  [Arrow keys] Move cursor  [Space] Run / Pause"
+  putStrLn "  [Arrow keys] Move cursor  [Space] Run / Pause  [Q] Quit"
   hFlush stdout
-  nextViewState <- waitForNextFrame (delayInMicroseconds runConfiguration) viewState
-  case generationLimit runConfiguration of
-    Just count | generation viewState >= count -> pure ()
-    _ -> runLoop runConfiguration (advanceBoard nextViewState)
+  maybeNextViewState <- waitForNextFrame (delayInMicroseconds runConfiguration) viewState
+  case (generationLimit runConfiguration, maybeNextViewState) of
+    (_, Nothing) -> pure ()
+    (Just count, _) | generation viewState >= count -> pure ()
+    (_, Just nextViewState) -> runLoop runConfiguration (advanceBoard nextViewState)
 
-waitForNextFrame :: Int -> ViewState -> IO ViewState
+waitForNextFrame :: Int -> ViewState -> IO (Maybe ViewState)
 waitForNextFrame remainingMicroseconds viewState
-  | remainingMicroseconds <= 0 = pure viewState
+  | remainingMicroseconds <= 0 = pure (Just viewState)
   | otherwise = do
-      nextViewState <- getNextViewState viewState
-      threadDelay (min 10000 remainingMicroseconds)
-      waitForNextFrame (remainingMicroseconds - min 10000 remainingMicroseconds) nextViewState
+      maybeNextViewState <- getNextViewState viewState
+      case maybeNextViewState of
+        Nothing -> pure Nothing
+        Just nextViewState -> do
+          threadDelay (min 10000 remainingMicroseconds)
+          waitForNextFrame (remainingMicroseconds - min 10000 remainingMicroseconds) nextViewState
 
-getNextViewState :: ViewState -> IO ViewState
+getNextViewState :: ViewState -> IO (Maybe ViewState)
 getNextViewState viewState = do
   maybeInput <- readInput
   pure $
     case maybeInput of
-      Just (MoveCursor direction) -> applyDirection viewState direction
-      Just ToggleRunning -> viewState {isRunning = not (isRunning viewState)}
-      Nothing -> viewState
+      Just (MoveCursor direction) -> Just (applyDirection viewState direction)
+      Just ToggleRunning -> Just viewState {isRunning = not (isRunning viewState)}
+      Just Quit -> Nothing
+      Nothing -> Just viewState
 
 moveCursor :: Cell -> Direction -> Cell
 moveCursor (x, y) direction =

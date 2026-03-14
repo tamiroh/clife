@@ -31,6 +31,7 @@ data Direction
 data Input
   = MoveCursor Direction
   | ToggleRunning
+  | Quit
 
 clearConsole :: IO ()
 clearConsole = putStr "\ESC[2J\ESC[H"
@@ -61,6 +62,8 @@ readInput :: IO (Maybe Input)
 readInput = do
   maybeFirst <- readCharIfReady
   case maybeFirst of
+    Just 'q' -> pure (Just Quit)
+    Just 'Q' -> pure (Just Quit)
     Just ' ' -> pure (Just ToggleRunning)
     Just '\ESC' -> do
       maybeSecond <- readCharIfReady
