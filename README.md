@@ -1,6 +1,6 @@
 # clife
 
-A terminal-based Conway's Game of Life implementation.
+A terminal cellular automata playground.
 
 ## Usage
 
