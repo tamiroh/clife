@@ -15,7 +15,7 @@ import TerminalControl
   ( Direction (..),
     Input (..),
     clearConsole,
-    clearFromCursorDown,
+    clearLine,
     hideCursor,
     moveCursorHome,
     readInput,
@@ -71,29 +71,31 @@ animateGenerations maybeGenerationLimit frameDelayInMicroseconds initialBoard = 
 runLoop :: RunConfiguration -> ViewState -> IO ()
 runLoop runConfiguration viewState = do
   moveCursorHome
-  clearFromCursorDown
-  putStrLn $
+  putLine $
     "Generation "
       ++ show (generation viewState)
       ++ "  Status: "
       ++ (if isRunning viewState then "running" else "paused")
       ++ "  Mode: "
       ++ (if isJumpMode viewState then "jump" else "normal")
-  putStrLn $
+  mapM_ putLine $
+    lines $
     renderLayout
       (board viewState)
       (viewportOrigin viewState)
       (cursor viewState)
       (if isJumpMode viewState then Just (jumpCursor viewState) else Nothing)
-  putStrLn "  [Arrow keys] Move cursor  [WASD] Move view  [X] Toggle cell  [Space] Run / Pause"
-  putStrLn "  [G] Jump mode  [Enter] Confirm jump"
-  putStrLn "  [Q] Quit"
+  putLine "  [Arrow keys] Move cursor  [WASD] Move view  [X] Toggle cell  [Space] Run / Pause"
+  putLine "  [G] Jump mode  [Enter] Confirm jump"
+  putLine "  [Q] Quit"
   hFlush stdout
   maybeNextViewState <- waitForNextFrame (delayInMicroseconds runConfiguration) viewState
   case (generationLimit runConfiguration, maybeNextViewState) of
     (_, Nothing) -> pure ()
     (Just count, _) | generation viewState >= count -> pure ()
     (_, Just nextViewState) -> runLoop runConfiguration (advanceBoard nextViewState)
+  where
+    putLine line = clearLine >> putStrLn line
 
 waitForNextFrame :: Int -> ViewState -> IO (Maybe ViewState)
 waitForNextFrame remainingMicroseconds viewState

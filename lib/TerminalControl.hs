@@ -2,7 +2,7 @@ module TerminalControl
   ( Direction (..),
     Input (..),
     clearConsole,
-    clearFromCursorDown,
+    clearLine,
     moveCursorHome,
     hideCursor,
     showCursor,
@@ -40,8 +40,8 @@ data Input
 clearConsole :: IO ()
 clearConsole = putStr "\ESC[2J\ESC[H"
 
-clearFromCursorDown :: IO ()
-clearFromCursorDown = putStr "\ESC[J"
+clearLine :: IO ()
+clearLine = putStr "\ESC[2K"
 
 moveCursorHome :: IO ()
 moveCursorHome = putStr "\ESC[H"
