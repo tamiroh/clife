@@ -39,9 +39,9 @@ maxMiniMapHeight = 10
 data ViewState = ViewState
   { isRunning :: Bool,
     generation :: Int,
-    viewViewportOrigin :: Cell,
-    viewCursor :: Cell,
-    viewBoard :: Board
+    viewportOrigin :: Cell,
+    cursor :: Cell,
+    board :: Board
   }
 
 data RunConfiguration = RunConfiguration
@@ -57,14 +57,14 @@ viewportCells (viewportX, viewportY) =
   ]
 
 showCell :: Board -> Cell -> Cell -> Cell -> String
-showCell board viewportOrigin cursor cell
-  | (originX + x, originY + y) == cursor = highlight contents
+showCell displayedBoard viewport cursorPosition cell
+  | (originX + x, originY + y) == cursorPosition = highlight contents
   | otherwise = contents
   where
     contents
-      | isAlive board (originX + x, originY + y) = liveCell "██"
+      | isAlive displayedBoard (originX + x, originY + y) = liveCell "██"
       | otherwise = "  "
-    (originX, originY) = viewportOrigin
+    (originX, originY) = viewport
     (x, y) = cell
 
 liveCell :: String -> String
@@ -77,22 +77,22 @@ highlightMiniMap :: String -> String
 highlightMiniMap contents = "\ESC[48;5;238m" ++ contents ++ "\ESC[0m"
 
 showBoardLines :: Board -> Cell -> Cell -> [String]
-showBoardLines board viewportOrigin cursor =
+showBoardLines displayedBoard viewport cursorPosition =
   [topBorder]
     ++ [showRow y | y <- [0 .. viewportHeight - 1]]
     ++ [bottomBorder]
   where
     topBorder = "+" ++ replicate (viewportWidth * 2) '-' ++ "+"
     bottomBorder = topBorder
-    showRow y = "|" ++ concat [showCell board viewportOrigin cursor (x, y) | x <- [0 .. viewportWidth - 1]] ++ "|"
+    showRow y = "|" ++ concat [showCell displayedBoard viewport cursorPosition (x, y) | x <- [0 .. viewportWidth - 1]] ++ "|"
 
 showMiniMapLines :: Board -> Cell -> [String]
-showMiniMapLines board viewportOrigin
-  | Set.null (liveCells board) = ["(empty)"]
+showMiniMapLines displayedBoard viewport
+  | Set.null (liveCells displayedBoard) = ["(empty)"]
   | otherwise = [showMiniMapRow y | y <- [0 .. miniMapHeight - 1]]
   where
-    boardCells = Set.toList (liveCells board)
-    ((minX, minY), (spanX, spanY)) = miniMapBounds boardCells viewportOrigin
+    boardCells = Set.toList (liveCells displayedBoard)
+    ((minX, minY), (spanX, spanY)) = miniMapBounds boardCells viewport
     (miniMapWidth, miniMapHeight) = miniMapSize spanX spanY
     scaleCell (x, y) =
       ( scaleCoordinate x minX spanX miniMapWidth,
@@ -101,7 +101,7 @@ showMiniMapLines board viewportOrigin
     scaledCells =
       Set.fromList (map scaleCell boardCells)
     scaledViewportCells =
-      Set.fromList (map scaleCell (viewportCells viewportOrigin))
+      Set.fromList (map scaleCell (viewportCells viewport))
     showMiniMapRow y =
       concat
         [ showMiniMapCell x y scaledCells scaledViewportCells
@@ -152,21 +152,21 @@ padLines targetLength rows =
   rows ++ replicate (targetLength - length rows) ""
 
 showLayout :: Board -> Cell -> Cell -> String
-showLayout board viewportOrigin cursor =
+showLayout displayedBoard viewport cursorPosition =
   unlines $
     zipWith
       (\boardRow miniMapRow -> boardRow ++ "    " ++ miniMapRow)
       paddedBoardLines
       paddedMiniMapLines
   where
-    boardLines = showBoardLines board viewportOrigin cursor
-    miniMapLines = "Mini-map:" : showMiniMapLines board viewportOrigin
+    boardLines = showBoardLines displayedBoard viewport cursorPosition
+    miniMapLines = "Mini-map:" : showMiniMapLines displayedBoard viewport
     totalRows = max (length boardLines) (length miniMapLines)
     paddedBoardLines = padLines totalRows boardLines
     paddedMiniMapLines = padLines totalRows miniMapLines
 
 animateGenerations :: Maybe Int -> Int -> Board -> IO ()
-animateGenerations maybeGenerationLimit frameDelayInMicroseconds board = do
+animateGenerations maybeGenerationLimit frameDelayInMicroseconds initialBoard = do
   clearConsole
   withRawTerminalInput $
     (hideCursor >> runLoop runConfiguration initialViewState)
@@ -181,9 +181,9 @@ animateGenerations maybeGenerationLimit frameDelayInMicroseconds board = do
       ViewState
         { isRunning = True,
           generation = 0,
-          viewViewportOrigin = (0, 0),
-          viewCursor = (0, 0),
-          viewBoard = board
+          viewportOrigin = (0, 0),
+          cursor = (0, 0),
+          board = initialBoard
         }
 
 runLoop :: RunConfiguration -> ViewState -> IO ()
@@ -192,7 +192,7 @@ runLoop runConfiguration viewState = do
   clearFromCursorDown
   putStrLn $ "Generation " ++ show (generation viewState)
   putStrLn $ "Status: " ++ if isRunning viewState then "running" else "paused"
-  putStrLn $ showLayout (viewBoard viewState) (viewViewportOrigin viewState) (viewCursor viewState)
+  putStrLn $ showLayout (board viewState) (viewportOrigin viewState) (cursor viewState)
   putStrLn "  [Arrow keys] Move cursor  [Space] Run / Pause  [Q] Quit"
   hFlush stdout
   maybeNextViewState <- waitForNextFrame (delayInMicroseconds runConfiguration) viewState
@@ -233,13 +233,13 @@ moveCursor (x, y) direction =
 applyDirection :: ViewState -> Direction -> ViewState
 applyDirection viewState direction =
   viewState
-    { viewViewportOrigin = nextViewportOrigin,
-      viewCursor = nextCursor
+    { viewportOrigin = nextViewportOrigin,
+      cursor = nextCursor
     }
   where
-    nextCursor = moveCursor (viewCursor viewState) direction
+    nextCursor = moveCursor (cursor viewState) direction
     nextViewportOrigin = (adjust originX cursorX viewportWidth, adjust originY cursorY viewportHeight)
-    (originX, originY) = viewViewportOrigin viewState
+    (originX, originY) = viewportOrigin viewState
     (cursorX, cursorY) = nextCursor
     adjust origin cursorCoord viewportSize
       | cursorCoord < origin = cursorCoord
@@ -251,6 +251,6 @@ advanceBoard viewState
   | isRunning viewState =
       viewState
         { generation = generation viewState + 1,
-          viewBoard = Board.advanceBoard (viewBoard viewState)
+          board = Board.advanceBoard (board viewState)
         }
   | otherwise = viewState
