@@ -36,6 +36,9 @@ maxMiniMapWidth = 28
 maxMiniMapHeight :: Int
 maxMiniMapHeight = 14
 
+edgeHintDistance :: Int
+edgeHintDistance = 6
+
 data ViewState = ViewState
   { isRunning :: Bool,
     generation :: Int,
@@ -82,9 +85,50 @@ showBoardLines displayedBoard viewport cursorPosition =
     ++ [showRow y | y <- [0 .. viewportHeight - 1]]
     ++ [bottomBorder]
   where
-    topBorder = "+" ++ replicate (viewportWidth * 2) '-' ++ "+"
-    bottomBorder = topBorder
-    showRow y = "|" ++ concat [showCell displayedBoard viewport cursorPosition (x, y) | x <- [0 .. viewportWidth - 1]] ++ "|"
+    (viewportX, viewportY) = viewport
+    topBorder =
+      "+"
+        ++ concat
+          [ borderSegment (hasAliveCellAlong (aboveCells x))
+          | x <- [0 .. viewportWidth - 1]
+          ]
+        ++ "+"
+    bottomBorder =
+      "+"
+        ++ concat
+          [ borderSegment (hasAliveCellAlong (belowCells x))
+          | x <- [0 .. viewportWidth - 1]
+          ]
+        ++ "+"
+    showRow y =
+      leftBorder y
+        ++ concat [showCell displayedBoard viewport cursorPosition (x, y) | x <- [0 .. viewportWidth - 1]]
+        ++ rightBorder y
+    leftBorder y = edgeMarker (hasAliveCellAlong (leftCells y))
+    rightBorder y = edgeMarker (hasAliveCellAlong (rightCells y))
+    aboveCells x =
+      [ (viewportX + x, viewportY - distance)
+      | distance <- [1 .. edgeHintDistance]
+      ]
+    belowCells x =
+      [ (viewportX + x, viewportY + viewportHeight + distance - 1)
+      | distance <- [1 .. edgeHintDistance]
+      ]
+    leftCells y =
+      [ (viewportX - distance, viewportY + y)
+      | distance <- [1 .. edgeHintDistance]
+      ]
+    rightCells y =
+      [ (viewportX + viewportWidth + distance - 1, viewportY + y)
+      | distance <- [1 .. edgeHintDistance]
+      ]
+    hasAliveCellAlong = any (isAlive displayedBoard)
+    borderSegment shouldHighlight
+      | shouldHighlight = liveCell "--"
+      | otherwise = "--"
+    edgeMarker shouldHighlight
+      | shouldHighlight = liveCell "|"
+      | otherwise = "|"
 
 showMiniMapLines :: Board -> Cell -> [String]
 showMiniMapLines displayedBoard viewport
