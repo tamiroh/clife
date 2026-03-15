@@ -23,7 +23,7 @@ maxMiniMapHeight :: Int
 maxMiniMapHeight = 14
 
 edgeHintDistance :: Int
-edgeHintDistance = 6
+edgeHintDistance = 100
 
 renderLayout :: Board -> Cell -> Cell -> Maybe Cell -> String
 renderLayout board viewport cursorPosition maybeJumpCursor =
@@ -136,7 +136,11 @@ renderMiniMapLines board viewport maybeJumpCursor
     scaledViewportCells = Set.fromList (map scaleCell (viewportCells viewport))
     showMiniMapRow y =
       concat
-        [ showMiniMapCell x y scaledCells scaledViewportCells
+        [ showMiniMapCell
+            x
+            y
+            scaledCells
+            scaledViewportCells
             maybeJumpCursor
         | x <- [0 .. miniMapWidth - 1]
         ]

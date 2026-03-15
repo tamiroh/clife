@@ -72,16 +72,22 @@ runLoop :: RunConfiguration -> ViewState -> IO ()
 runLoop runConfiguration viewState = do
   moveCursorHome
   clearFromCursorDown
-  putStrLn $ "Generation " ++ show (generation viewState)
-  putStrLn $ "Status: " ++ if isRunning viewState then "running" else "paused"
-  putStrLn $ "Mode: " ++ if isJumpMode viewState then "jump" else "normal"
+  putStrLn $
+    "Generation "
+      ++ show (generation viewState)
+      ++ "  Status: "
+      ++ (if isRunning viewState then "running" else "paused")
+      ++ "  Mode: "
+      ++ (if isJumpMode viewState then "jump" else "normal")
   putStrLn $
     renderLayout
       (board viewState)
       (viewportOrigin viewState)
       (cursor viewState)
       (if isJumpMode viewState then Just (jumpCursor viewState) else Nothing)
-  putStrLn "  [G] Jump mode  [Enter] Confirm jump  [Arrow keys] Move cursor  [WASD] Move view  [X] Toggle cell  [Space] Run / Pause  [Q] Quit"
+  putStrLn "  [Arrow keys] Move cursor  [WASD] Move view  [X] Toggle cell  [Space] Run / Pause"
+  putStrLn "  [G] Jump mode  [Enter] Confirm jump"
+  putStrLn "  [Q] Quit"
   hFlush stdout
   maybeNextViewState <- waitForNextFrame (delayInMicroseconds runConfiguration) viewState
   case (generationLimit runConfiguration, maybeNextViewState) of
