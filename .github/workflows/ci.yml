@@ -1,4 +1,4 @@
-name: Haskell CI
+name: CI
 
 on:
   push:
@@ -15,14 +15,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-haskell@v1
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+    - uses: actions/setup-haskell@048c29979717135f04282c42c2186bb5945b2d8f # v1.1.4
       with:
         ghc-version: '8.10.3'
         cabal-version: '3.2'
 
     - name: Cache
-      uses: actions/cache@v3
+      uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3.5.0
       env:
         cache-name: cache-cabal
       with:
