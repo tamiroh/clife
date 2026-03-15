@@ -25,6 +25,7 @@ library
         BoardFile
         Board
         LifeLike
+        TerminalRender
         TerminalUI
     other-modules:
         TerminalControl
