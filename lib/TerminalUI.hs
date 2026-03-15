@@ -3,10 +3,11 @@ module TerminalUI
   )
 where
 
+import Board (Board, Cell, isAlive, liveCells)
+import qualified Board
 import Control.Concurrent (threadDelay)
 import Control.Exception (finally)
 import qualified Data.Set as Set
-import GameOfLife (Board (..), Cell, isAlive, nextGeneration)
 import System.IO
   ( hFlush,
     stdout,
@@ -250,6 +251,6 @@ advanceBoard viewState
   | isRunning viewState =
       viewState
         { generation = generation viewState + 1,
-          viewBoard = nextGeneration (viewBoard viewState)
+          viewBoard = Board.advanceBoard (viewBoard viewState)
         }
   | otherwise = viewState

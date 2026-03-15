@@ -1,25 +1,16 @@
-module GameOfLife
-  ( Cell,
-    Board (..),
-    isAlive,
-    makeBoard,
-    nextGeneration,
+module LifeLike
+  ( Rules (..),
+    nextBoardWithRules,
   )
 where
 
+import Board (Board, Cell, isAlive, liveCells, setLiveCells)
 import qualified Data.Set as Set
 
-type Cell = (Int, Int)
-
-newtype Board = Board
-  { liveCells :: Set.Set Cell
+data Rules = Rules
+  { surviveWhenNeighborsAre :: [Int],
+    birthWhenNeighborsAre :: [Int]
   }
-
-makeBoard :: [Cell] -> Board
-makeBoard boardCells =
-  Board
-    { liveCells = Set.fromList boardCells
-    }
 
 neighbors :: Cell -> [Cell]
 neighbors (x, y) =
@@ -33,23 +24,20 @@ neighbors (x, y) =
     (x + 1, y + 1)
   ]
 
-isAlive :: Board -> Cell -> Bool
-isAlive board targetCell = targetCell `Set.member` liveCells board
-
 liveNeighbors :: Board -> Cell -> Int
 liveNeighbors board cell =
   length [neighbor | neighbor <- neighbors cell, isAlive board neighbor]
 
-survivors :: Board -> Set.Set Cell
-survivors board =
+survivors :: Rules -> Board -> Set.Set Cell
+survivors rules board =
   Set.filter survives (liveCells board)
   where
     survives cell =
       let n = liveNeighbors board cell
-       in n == 2 || n == 3
+       in n `elem` surviveWhenNeighborsAre rules
 
-births :: Board -> Set.Set Cell
-births board =
+births :: Rules -> Board -> Set.Set Cell
+births rules board =
   Set.filter isBirthCell (birthCandidates `Set.difference` liveCells board)
   where
     birthCandidates =
@@ -58,10 +46,8 @@ births board =
         | livingCell <- Set.toList (liveCells board),
           neighbor <- neighbors livingCell
         ]
-    isBirthCell cell = liveNeighbors board cell == 3
+    isBirthCell cell = liveNeighbors board cell `elem` birthWhenNeighborsAre rules
 
-nextGeneration :: Board -> Board
-nextGeneration board =
-  board
-    { liveCells = survivors board `Set.union` births board
-    }
+nextBoardWithRules :: Rules -> Board -> Board
+nextBoardWithRules rules board =
+  setLiveCells board (survivors rules board `Set.union` births rules board)
