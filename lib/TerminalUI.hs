@@ -31,10 +31,10 @@ viewportHeight :: Int
 viewportHeight = 20
 
 maxMiniMapWidth :: Int
-maxMiniMapWidth = 20
+maxMiniMapWidth = 28
 
 maxMiniMapHeight :: Int
-maxMiniMapHeight = 10
+maxMiniMapHeight = 14
 
 data ViewState = ViewState
   { isRunning :: Bool,
