@@ -30,6 +30,7 @@ data Direction
 
 data Input
   = MoveCursor Direction
+  | ToggleCell
   | ToggleRunning
   | Quit
 
@@ -64,6 +65,8 @@ readInput = do
   case maybeFirst of
     Just 'q' -> pure (Just Quit)
     Just 'Q' -> pure (Just Quit)
+    Just 'x' -> pure (Just ToggleCell)
+    Just 'X' -> pure (Just ToggleCell)
     Just ' ' -> pure (Just ToggleRunning)
     Just '\ESC' -> do
       maybeSecond <- readCharIfReady

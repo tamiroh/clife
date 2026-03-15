@@ -3,7 +3,7 @@ module TerminalUI
   )
 where
 
-import Board (Board, Cell, isAlive, liveCells)
+import Board (Board, Cell, isAlive, liveCells, toggleCell)
 import qualified Board
 import Control.Concurrent (threadDelay)
 import Control.Exception (finally)
@@ -193,7 +193,7 @@ runLoop runConfiguration viewState = do
   putStrLn $ "Generation " ++ show (generation viewState)
   putStrLn $ "Status: " ++ if isRunning viewState then "running" else "paused"
   putStrLn $ showLayout (board viewState) (viewportOrigin viewState) (cursor viewState)
-  putStrLn "  [Arrow keys] Move cursor  [Space] Run / Pause  [Q] Quit"
+  putStrLn "  [Arrow keys] Move cursor  [X] Toggle cell  [Space] Run / Pause  [Q] Quit"
   hFlush stdout
   maybeNextViewState <- waitForNextFrame (delayInMicroseconds runConfiguration) viewState
   case (generationLimit runConfiguration, maybeNextViewState) of
@@ -218,6 +218,7 @@ getNextViewState viewState = do
   pure $
     case maybeInput of
       Just (MoveCursor direction) -> Just (applyDirection viewState direction)
+      Just ToggleCell -> Just (toggleCursorCell viewState)
       Just ToggleRunning -> Just viewState {isRunning = not (isRunning viewState)}
       Just Quit -> Nothing
       Nothing -> Just viewState
@@ -245,6 +246,12 @@ applyDirection viewState direction =
       | cursorCoord < origin = cursorCoord
       | cursorCoord >= origin + viewportSize = cursorCoord - viewportSize + 1
       | otherwise = origin
+
+toggleCursorCell :: ViewState -> ViewState
+toggleCursorCell viewState =
+  viewState
+    { board = toggleCell (board viewState) (cursor viewState)
+    }
 
 advanceBoard :: ViewState -> ViewState
 advanceBoard viewState

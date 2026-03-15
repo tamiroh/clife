@@ -5,6 +5,7 @@ module Board
     isAlive,
     makeBoard,
     setLiveCells,
+    toggleCell,
     advanceBoard,
   )
 where
@@ -33,6 +34,11 @@ setLiveCells board nextLiveCells =
   board
     { liveCells = nextLiveCells
     }
+
+toggleCell :: Board -> Cell -> Board
+toggleCell board cell
+  | isAlive board cell = setLiveCells board (Set.delete cell (liveCells board))
+  | otherwise = setLiveCells board (Set.insert cell (liveCells board))
 
 advanceBoard :: Board -> Board
 advanceBoard board = nextBoard board board
