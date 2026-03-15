@@ -10,7 +10,7 @@ import Algorithm (Algorithm (..), algorithmImplFor)
 import AlgorithmImpl (nextBoard)
 import Board (Board, Cell, makeBoard)
 import Data.Aeson (FromJSON (parseJSON), eitherDecode)
-import Data.Aeson.Types (Parser, withObject, (.!=), (.:), (.:?))
+import Data.Aeson.Types (Parser, withObject, (.:))
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as Text
 
@@ -22,7 +22,7 @@ data BoardPayload = BoardPayload
 instance FromJSON BoardPayload where
   parseJSON = withObject "BoardPayload" $ \object ->
     BoardPayload
-      <$> (parseAlgorithm =<< object .:? "algorithm" .!= "conway")
+      <$> (parseAlgorithm =<< object .: "algorithm")
       <*> object .: "cells"
 
 parseAlgorithm :: Text.Text -> Parser Algorithm

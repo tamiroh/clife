@@ -1,4 +1,5 @@
 {
+  "algorithm": "conway",
   "cells": [
     [40, 20],
     [41, 20],
