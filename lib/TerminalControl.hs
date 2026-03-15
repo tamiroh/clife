@@ -30,6 +30,7 @@ data Direction
 
 data Input
   = MoveCursor Direction
+  | MoveViewport Direction
   | ToggleCell
   | ToggleRunning
   | Quit
@@ -65,6 +66,14 @@ readInput = do
   case maybeFirst of
     Just 'q' -> pure (Just Quit)
     Just 'Q' -> pure (Just Quit)
+    Just 'w' -> pure (Just (MoveViewport MoveUp))
+    Just 'W' -> pure (Just (MoveViewport MoveUp))
+    Just 's' -> pure (Just (MoveViewport MoveDown))
+    Just 'S' -> pure (Just (MoveViewport MoveDown))
+    Just 'a' -> pure (Just (MoveViewport MoveLeft))
+    Just 'A' -> pure (Just (MoveViewport MoveLeft))
+    Just 'd' -> pure (Just (MoveViewport MoveRight))
+    Just 'D' -> pure (Just (MoveViewport MoveRight))
     Just 'x' -> pure (Just ToggleCell)
     Just 'X' -> pure (Just ToggleCell)
     Just ' ' -> pure (Just ToggleRunning)

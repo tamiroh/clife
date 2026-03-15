@@ -65,7 +65,7 @@ runLoop runConfiguration viewState = do
   putStrLn $ "Generation " ++ show (generation viewState)
   putStrLn $ "Status: " ++ if isRunning viewState then "running" else "paused"
   putStrLn $ renderLayout (board viewState) (viewportOrigin viewState) (cursor viewState)
-  putStrLn "  [Arrow keys] Move cursor  [X] Toggle cell  [Space] Run / Pause  [Q] Quit"
+  putStrLn "  [Arrow keys] Move cursor  [WASD] Move view  [X] Toggle cell  [Space] Run / Pause  [Q] Quit"
   hFlush stdout
   maybeNextViewState <- waitForNextFrame (delayInMicroseconds runConfiguration) viewState
   case (generationLimit runConfiguration, maybeNextViewState) of
@@ -90,6 +90,7 @@ getNextViewState viewState = do
   pure $
     case maybeInput of
       Just (MoveCursor direction) -> Just (applyDirection viewState direction)
+      Just (MoveViewport direction) -> Just (applyViewportDirection viewState direction)
       Just ToggleCell -> Just (toggleCursorCell viewState)
       Just ToggleRunning -> Just viewState {isRunning = not (isRunning viewState)}
       Just Quit -> Nothing
@@ -123,6 +124,13 @@ toggleCursorCell :: ViewState -> ViewState
 toggleCursorCell viewState =
   viewState
     { board = toggleCell (board viewState) (cursor viewState)
+    }
+
+applyViewportDirection :: ViewState -> Direction -> ViewState
+applyViewportDirection viewState direction =
+  viewState
+    { viewportOrigin = moveCursor (viewportOrigin viewState) direction,
+      cursor = moveCursor (cursor viewState) direction
     }
 
 advanceBoard :: ViewState -> ViewState
