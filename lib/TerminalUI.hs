@@ -22,10 +22,18 @@ import TerminalControl
     showCursor,
     withRawTerminalInput,
   )
-import TerminalRender (renderLayout, viewportHeight, viewportWidth)
+import TerminalRender
+  ( miniMapSizeFor,
+    miniMapTargetCellFor,
+    renderLayout,
+    viewportHeight,
+    viewportWidth,
+  )
 
 data ViewState = ViewState
   { isRunning :: Bool,
+    isJumpMode :: Bool,
+    jumpCursor :: Cell,
     generation :: Int,
     viewportOrigin :: Cell,
     cursor :: Cell,
@@ -52,6 +60,8 @@ animateGenerations maybeGenerationLimit frameDelayInMicroseconds initialBoard = 
     initialViewState =
       ViewState
         { isRunning = True,
+          isJumpMode = False,
+          jumpCursor = (0, 0),
           generation = 0,
           viewportOrigin = (0, 0),
           cursor = (0, 0),
@@ -64,8 +74,14 @@ runLoop runConfiguration viewState = do
   clearFromCursorDown
   putStrLn $ "Generation " ++ show (generation viewState)
   putStrLn $ "Status: " ++ if isRunning viewState then "running" else "paused"
-  putStrLn $ renderLayout (board viewState) (viewportOrigin viewState) (cursor viewState)
-  putStrLn "  [Arrow keys] Move cursor  [WASD] Move view  [X] Toggle cell  [Space] Run / Pause  [Q] Quit"
+  putStrLn $ "Mode: " ++ if isJumpMode viewState then "jump" else "normal"
+  putStrLn $
+    renderLayout
+      (board viewState)
+      (viewportOrigin viewState)
+      (cursor viewState)
+      (if isJumpMode viewState then Just (jumpCursor viewState) else Nothing)
+  putStrLn "  [G] Jump mode  [Enter] Confirm jump  [Arrow keys] Move cursor  [WASD] Move view  [X] Toggle cell  [Space] Run / Pause  [Q] Quit"
   hFlush stdout
   maybeNextViewState <- waitForNextFrame (delayInMicroseconds runConfiguration) viewState
   case (generationLimit runConfiguration, maybeNextViewState) of
@@ -89,12 +105,24 @@ getNextViewState viewState = do
   maybeInput <- readInput
   pure $
     case maybeInput of
-      Just (MoveCursor direction) -> Just (applyDirection viewState direction)
-      Just (MoveViewport direction) -> Just (applyViewportDirection viewState direction)
+      Just (MoveCursor direction) -> Just (applyDirectionalInput viewState applyDirection direction)
+      Just (MoveViewport direction) -> Just (applyDirectionalInput viewState applyViewportDirection direction)
       Just ToggleCell -> Just (toggleCursorCell viewState)
       Just ToggleRunning -> Just viewState {isRunning = not (isRunning viewState)}
+      Just ToggleJumpMode -> Just viewState {isJumpMode = not (isJumpMode viewState)}
+      Just ConfirmJump -> Just (applyIfJumpMode viewState applyJump)
       Just Quit -> Nothing
       Nothing -> Just viewState
+
+applyDirectionalInput :: ViewState -> (ViewState -> Direction -> ViewState) -> Direction -> ViewState
+applyDirectionalInput viewState applyInNormalMode direction
+  | isJumpMode viewState = moveJumpCursor viewState direction
+  | otherwise = applyInNormalMode viewState direction
+
+applyIfJumpMode :: ViewState -> (ViewState -> ViewState) -> ViewState
+applyIfJumpMode viewState transform
+  | isJumpMode viewState = transform viewState
+  | otherwise = viewState
 
 moveCursor :: Cell -> Direction -> Cell
 moveCursor (x, y) direction =
@@ -132,6 +160,30 @@ applyViewportDirection viewState direction =
     { viewportOrigin = moveCursor (viewportOrigin viewState) direction,
       cursor = moveCursor (cursor viewState) direction
     }
+
+moveJumpCursor :: ViewState -> Direction -> ViewState
+moveJumpCursor viewState direction =
+  viewState
+    { jumpCursor = (clamp 0 (miniMapWidth - 1) nextX, clamp 0 (miniMapHeight - 1) nextY)
+    }
+  where
+    (miniMapWidth, miniMapHeight) = miniMapSizeFor (board viewState) (viewportOrigin viewState)
+    (nextX, nextY) = moveCursor (jumpCursor viewState) direction
+    clamp lower upper value = max lower (min upper value)
+
+applyJump :: ViewState -> ViewState
+applyJump viewState =
+  viewState
+    { isJumpMode = False,
+      viewportOrigin = (targetX - viewportWidth `div` 2, targetY - viewportHeight `div` 2),
+      cursor = targetCell
+    }
+  where
+    targetCell@(targetX, targetY) =
+      miniMapTargetCellFor
+        (board viewState)
+        (viewportOrigin viewState)
+        (jumpCursor viewState)
 
 advanceBoard :: ViewState -> ViewState
 advanceBoard viewState

@@ -1,6 +1,8 @@
 module TerminalRender
   ( viewportWidth,
     viewportHeight,
+    miniMapSizeFor,
+    miniMapTargetCellFor,
     renderLayout,
   )
 where
@@ -23,8 +25,8 @@ maxMiniMapHeight = 14
 edgeHintDistance :: Int
 edgeHintDistance = 6
 
-renderLayout :: Board -> Cell -> Cell -> String
-renderLayout board viewport cursorPosition =
+renderLayout :: Board -> Cell -> Cell -> Maybe Cell -> String
+renderLayout board viewport cursorPosition maybeJumpCursor =
   unlines $
     zipWith
       (\boardRow miniMapRow -> boardRow ++ "    " ++ miniMapRow)
@@ -32,7 +34,7 @@ renderLayout board viewport cursorPosition =
       paddedMiniMapLines
   where
     boardLines = renderBoardLines board viewport cursorPosition
-    miniMapLines = "Mini-map:" : renderMiniMapLines board viewport
+    miniMapLines = "Mini-map:" : renderMiniMapLines board viewport maybeJumpCursor
     totalRows = max (length boardLines) (length miniMapLines)
     paddedBoardLines = padLines totalRows boardLines
     paddedMiniMapLines = padLines totalRows miniMapLines
@@ -63,6 +65,9 @@ highlight contents = "\ESC[7m" ++ contents ++ "\ESC[0m"
 
 highlightMiniMap :: String -> String
 highlightMiniMap contents = "\ESC[48;5;238m" ++ contents ++ "\ESC[0m"
+
+highlightJumpCursor :: String -> String
+highlightJumpCursor contents = "\ESC[7m" ++ contents ++ "\ESC[0m"
 
 renderBoardLines :: Board -> Cell -> Cell -> [String]
 renderBoardLines board viewport cursorPosition =
@@ -115,14 +120,14 @@ renderBoardLines board viewport cursorPosition =
       | shouldHighlight = liveCell "|"
       | otherwise = "|"
 
-renderMiniMapLines :: Board -> Cell -> [String]
-renderMiniMapLines board viewport
+renderMiniMapLines :: Board -> Cell -> Maybe Cell -> [String]
+renderMiniMapLines board viewport maybeJumpCursor
   | Set.null (liveCells board) = ["(empty)"]
   | otherwise = [showMiniMapRow y | y <- [0 .. miniMapHeight - 1]]
   where
     boardCells = Set.toList (liveCells board)
     ((minX, minY), (spanX, spanY)) = miniMapBounds boardCells viewport
-    (miniMapWidth, miniMapHeight) = miniMapSize spanX spanY
+    (miniMapWidth, miniMapHeight) = miniMapSizeFor board viewport
     scaleCell (x, y) =
       ( scaleCoordinate x minX spanX miniMapWidth,
         scaleCoordinate y minY spanY miniMapHeight
@@ -132,11 +137,13 @@ renderMiniMapLines board viewport
     showMiniMapRow y =
       concat
         [ showMiniMapCell x y scaledCells scaledViewportCells
+            maybeJumpCursor
         | x <- [0 .. miniMapWidth - 1]
         ]
 
-showMiniMapCell :: Int -> Int -> Set.Set Cell -> Set.Set Cell -> String
-showMiniMapCell x y scaledCells scaledViewportCells
+showMiniMapCell :: Int -> Int -> Set.Set Cell -> Set.Set Cell -> Maybe Cell -> String
+showMiniMapCell x y scaledCells scaledViewportCells maybeJumpCursor
+  | Just (x, y) == maybeJumpCursor = highlightJumpCursor contents
   | (x, y) `Set.member` scaledViewportCells = highlightMiniMap contents
   | otherwise = contents
   where
@@ -162,6 +169,30 @@ miniMapBounds boardCells (viewportX, viewportY) =
 scaleCoordinate :: Int -> Int -> Int -> Int -> Int
 scaleCoordinate value minValue spanValue targetSize =
   ((value - minValue) * max 0 (targetSize - 1)) `div` spanValue
+
+unscaleCoordinate :: Int -> Int -> Int -> Int -> Int
+unscaleCoordinate value minValue spanValue targetSize
+  | targetSize <= 1 = minValue
+  | otherwise =
+      minValue + (value * spanValue) `div` max 1 (targetSize - 1)
+
+miniMapSizeFor :: Board -> Cell -> (Int, Int)
+miniMapSizeFor board viewport
+  | Set.null (liveCells board) = (1, 1)
+  | otherwise = miniMapSize spanX spanY
+  where
+    boardCells = Set.toList (liveCells board)
+    (_, (spanX, spanY)) = miniMapBounds boardCells viewport
+
+miniMapTargetCellFor :: Board -> Cell -> Cell -> Cell
+miniMapTargetCellFor board viewport (miniMapX, miniMapY) =
+  ( unscaleCoordinate miniMapX minX spanX miniMapWidth,
+    unscaleCoordinate miniMapY minY spanY miniMapHeight
+  )
+  where
+    boardCells = Set.toList (liveCells board)
+    ((minX, minY), (spanX, spanY)) = miniMapBounds boardCells viewport
+    (miniMapWidth, miniMapHeight) = miniMapSizeFor board viewport
 
 miniMapSize :: Int -> Int -> (Int, Int)
 miniMapSize spanX spanY

@@ -33,6 +33,8 @@ data Input
   | MoveViewport Direction
   | ToggleCell
   | ToggleRunning
+  | ToggleJumpMode
+  | ConfirmJump
   | Quit
 
 clearConsole :: IO ()
@@ -76,6 +78,10 @@ readInput = do
     Just 'D' -> pure (Just (MoveViewport MoveRight))
     Just 'x' -> pure (Just ToggleCell)
     Just 'X' -> pure (Just ToggleCell)
+    Just 'g' -> pure (Just ToggleJumpMode)
+    Just 'G' -> pure (Just ToggleJumpMode)
+    Just '\n' -> pure (Just ConfirmJump)
+    Just '\r' -> pure (Just ConfirmJump)
     Just ' ' -> pure (Just ToggleRunning)
     Just '\ESC' -> do
       maybeSecond <- readCharIfReady
