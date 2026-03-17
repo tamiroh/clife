@@ -13,4 +13,4 @@ main = do
       case result of
         Right board -> animateGenerations Nothing 50000 board
         Left message -> putStrLn ("Failed to load board: " ++ message)
-    _ -> putStrLn "Usage: cabal run clife -- <board-file.json>"
+    _ -> putStrLn "Usage: clife <board-file.json>"
