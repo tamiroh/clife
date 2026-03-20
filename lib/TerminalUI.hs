@@ -83,12 +83,12 @@ runLoop runConfiguration viewState = do
       ++ (if isJumpMode nextViewState then "jump" else "normal")
   mapM_ putLine $
     lines $
-    renderLayout
-      nextViewportSize
-      (board nextViewState)
-      (viewportOrigin nextViewState)
-      (cursor nextViewState)
-      (if isJumpMode nextViewState then Just (jumpCursor nextViewState) else Nothing)
+      renderLayout
+        nextViewportSize
+        (board nextViewState)
+        (viewportOrigin nextViewState)
+        (cursor nextViewState)
+        (if isJumpMode nextViewState then Just (jumpCursor nextViewState) else Nothing)
   putLine "  [Arrow keys] Move cursor  [WASD] Move view  [X] Toggle cell  [Space] Run / Pause"
   putLine "  [G] Jump mode  [Enter] Confirm jump"
   putLine "  [Q] Quit"
