@@ -104,10 +104,12 @@ applyAction viewState action =
   case action of
     MoveCursorAction direction -> applyDirectionalInput activeViewportSize viewState applyDirection direction
     MoveViewportAction direction -> applyDirectionalInput activeViewportSize viewState applyViewportDirection direction
-    ToggleCellAction -> toggleCursorCell viewState
+    ToggleCellAction -> viewState {board = toggleCell (board viewState) (cursor viewState)}
     ToggleRunningAction -> viewState {isRunning = not (isRunning viewState)}
     ToggleJumpModeAction -> viewState {isJumpMode = not (isJumpMode viewState)}
-    ConfirmJumpAction -> applyIfJumpMode viewState (applyJump activeViewportSize)
+    ConfirmJumpAction
+      | isJumpMode viewState -> applyJump activeViewportSize viewState
+      | otherwise -> viewState
   where
     activeViewportSize = viewportSize viewState
 
@@ -115,11 +117,6 @@ applyDirectionalInput :: (Int, Int) -> ViewState -> ((Int, Int) -> ViewState -> 
 applyDirectionalInput activeViewportSize viewState applyInNormalMode direction
   | isJumpMode viewState = moveJumpCursor activeViewportSize viewState direction
   | otherwise = applyInNormalMode activeViewportSize viewState direction
-
-applyIfJumpMode :: ViewState -> (ViewState -> ViewState) -> ViewState
-applyIfJumpMode viewState transform
-  | isJumpMode viewState = transform viewState
-  | otherwise = viewState
 
 moveCursor :: Cell -> Direction -> Cell
 moveCursor (x, y) direction =
@@ -144,12 +141,6 @@ applyDirection (viewportWidth, viewportHeight) viewState direction =
       | cursorCoord < origin = cursorCoord
       | cursorCoord >= origin + viewportAxisSize = cursorCoord - viewportAxisSize + 1
       | otherwise = origin
-
-toggleCursorCell :: ViewState -> ViewState
-toggleCursorCell viewState =
-  viewState
-    { board = toggleCell (board viewState) (cursor viewState)
-    }
 
 applyViewportDirection :: (Int, Int) -> ViewState -> Direction -> ViewState
 applyViewportDirection _ viewState direction =
