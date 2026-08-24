@@ -5,29 +5,55 @@ where
 
 import Board (Board, Cell, toggleCell)
 import qualified Board
-import Control.Concurrent (threadDelay)
-import Control.Exception (finally)
-import System.Console.ANSI (getTerminalSize)
-import System.IO
-  ( hFlush,
-    stdout,
+import Brick
+  ( App (..),
+    BrickEvent (AppEvent, VtyEvent),
+    EventM,
+    Widget,
+    attrMap,
+    getVtyHandle,
+    halt,
+    neverShowCursor,
+    str,
+    vBox,
   )
-import TerminalControl
-  ( Direction (..),
-    Input (..),
-    clearConsole,
-    clearLine,
-    hideCursor,
-    moveCursorHome,
-    readInput,
-    showCursor,
-    withRawTerminalInput,
+import Brick.BChan (newBChan, writeBChan)
+import Brick.Main (customMain)
+import Control.Concurrent (forkIO, threadDelay)
+import Control.Monad (forever, when)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.State (get, modify, put)
+import Data.Char (toLower)
+import Graphics.Vty
+  ( Event (EvKey, EvResize),
+    Key (KChar, KDown, KEnter, KLeft, KRight, KUp),
+    defAttr,
+    defaultConfig,
+    displayBounds,
+    outputIface,
   )
+import Graphics.Vty.CrossPlatform (mkVty)
 import TerminalRender
   ( miniMapSizeFor,
     miniMapTargetCellFor,
     renderLayout,
   )
+
+data Direction
+  = MoveUp
+  | MoveDown
+  | MoveLeft
+  | MoveRight
+
+data Action
+  = MoveCursorAction Direction
+  | MoveViewportAction Direction
+  | ToggleCellAction
+  | ToggleRunningAction
+  | ToggleJumpModeAction
+  | ConfirmJumpAction
+
+data ClifeEvent = Tick
 
 data ViewState = ViewState
   { isRunning :: Bool,
@@ -35,28 +61,23 @@ data ViewState = ViewState
     jumpCursor :: Cell,
     viewportSize :: (Int, Int),
     generation :: Int,
+    generationLimit :: Maybe Int,
     viewportOrigin :: Cell,
     cursor :: Cell,
     board :: Board
   }
 
-data RunConfiguration = RunConfiguration
-  { generationLimit :: Maybe Int,
-    delayInMicroseconds :: Int
-  }
-
 animateGenerations :: Maybe Int -> Int -> Board -> IO ()
 animateGenerations maybeGenerationLimit frameDelayInMicroseconds initialBoard = do
-  clearConsole
-  withRawTerminalInput $
-    (hideCursor >> runLoop runConfiguration initialViewState)
-      `finally` showCursor
+  eventChannel <- newBChan 10
+  _ <- forkIO $ forever $ do
+    threadDelay frameDelayInMicroseconds
+    writeBChan eventChannel Tick
+  initialVty <- buildVty
+  _ <- customMain initialVty buildVty (Just eventChannel) clifeApp initialViewState
+  pure ()
   where
-    runConfiguration =
-      RunConfiguration
-        { generationLimit = maybeGenerationLimit,
-          delayInMicroseconds = frameDelayInMicroseconds
-        }
+    buildVty = mkVty defaultConfig
     initialViewState =
       ViewState
         { isRunning = True,
@@ -64,67 +85,97 @@ animateGenerations maybeGenerationLimit frameDelayInMicroseconds initialBoard = 
           jumpCursor = (0, 0),
           viewportSize = (40, 20),
           generation = 0,
+          generationLimit = maybeGenerationLimit,
           viewportOrigin = (0, 0),
           cursor = (0, 0),
           board = initialBoard
         }
 
-runLoop :: RunConfiguration -> ViewState -> IO ()
-runLoop runConfiguration viewState = do
-  nextViewportSize <- refreshViewportSize viewState
-  let nextViewState = viewState {viewportSize = nextViewportSize}
-  moveCursorHome
-  putLine $
-    "Generation "
-      ++ show (generation nextViewState)
-      ++ "  Status: "
-      ++ (if isRunning nextViewState then "running" else "paused")
-      ++ "  Mode: "
-      ++ (if isJumpMode nextViewState then "jump" else "normal")
-  mapM_ putLine $
-    lines $
-      renderLayout
-        nextViewportSize
-        (board nextViewState)
-        (viewportOrigin nextViewState)
-        (cursor nextViewState)
-        (if isJumpMode nextViewState then Just (jumpCursor nextViewState) else Nothing)
-  putLine "  [Arrow keys] Move cursor  [WASD] Move view  [X] Toggle cell  [Space] Run / Pause"
-  putLine "  [G] Jump mode  [Enter] Confirm jump"
-  putLine "  [Q] Quit"
-  hFlush stdout
-  maybeAdvancedViewState <- waitForNextFrame nextViewportSize (delayInMicroseconds runConfiguration) nextViewState
-  case (generationLimit runConfiguration, maybeAdvancedViewState) of
-    (_, Nothing) -> pure ()
-    (Just count, _) | generation nextViewState >= count -> pure ()
-    (_, Just advancedViewState) -> runLoop runConfiguration (advanceBoard advancedViewState)
+clifeApp :: App ViewState ClifeEvent ()
+clifeApp =
+  App
+    { appDraw = drawUI,
+      appChooseCursor = neverShowCursor,
+      appHandleEvent = handleClifeEvent,
+      appStartEvent = initializeViewportSize,
+      appAttrMap = const (attrMap defAttr [])
+    }
+
+initializeViewportSize :: EventM () ViewState ()
+initializeViewportSize = do
+  vty <- getVtyHandle
+  (width, height) <- liftIO (displayBounds (outputIface vty))
+  modify (\viewState -> viewState {viewportSize = viewportSizeForWindow width height})
+
+drawUI :: ViewState -> [Widget ()]
+drawUI viewState =
+  [ vBox
+      [ str statusLine,
+        renderLayout (viewportSize viewState) (board viewState) (viewportOrigin viewState) (cursor viewState) maybeJumpCursor,
+        str "  [Arrow keys] Move cursor  [WASD] Move view  [X] Toggle cell  [Space] Run / Pause",
+        str "  [G] Jump mode  [Enter] Confirm jump",
+        str "  [Q] Quit"
+      ]
+  ]
   where
-    putLine line = clearLine >> putStrLn line
+    statusLine =
+      "Generation "
+        ++ show (generation viewState)
+        ++ "  Status: "
+        ++ (if isRunning viewState then "running" else "paused")
+        ++ "  Mode: "
+        ++ (if isJumpMode viewState then "jump" else "normal")
+    maybeJumpCursor = if isJumpMode viewState then Just (jumpCursor viewState) else Nothing
 
-waitForNextFrame :: (Int, Int) -> Int -> ViewState -> IO (Maybe ViewState)
-waitForNextFrame activeViewportSize remainingMicroseconds viewState
-  | remainingMicroseconds <= 0 = pure (Just viewState)
-  | otherwise = do
-      maybeNextViewState <- getNextViewState activeViewportSize viewState
-      case maybeNextViewState of
-        Nothing -> pure Nothing
-        Just nextViewState -> do
-          threadDelay (min 10000 remainingMicroseconds)
-          waitForNextFrame activeViewportSize (remainingMicroseconds - min 10000 remainingMicroseconds) nextViewState
+handleClifeEvent :: BrickEvent () ClifeEvent -> EventM () ViewState ()
+handleClifeEvent (AppEvent Tick) = tick
+handleClifeEvent (VtyEvent (EvResize width height)) =
+  modify (\viewState -> viewState {viewportSize = viewportSizeForWindow width height})
+handleClifeEvent (VtyEvent (EvKey (KChar c) _)) | toLower c == 'q' = halt
+handleClifeEvent (VtyEvent (EvKey key _)) =
+  case keyToAction key of
+    Nothing -> pure ()
+    Just action -> modify (`applyAction` action)
+handleClifeEvent _ = pure ()
 
-getNextViewState :: (Int, Int) -> ViewState -> IO (Maybe ViewState)
-getNextViewState activeViewportSize viewState = do
-  maybeInput <- readInput
-  pure $
-    case maybeInput of
-      Just (MoveCursor direction) -> Just (applyDirectionalInput activeViewportSize viewState applyDirection direction)
-      Just (MoveViewport direction) -> Just (applyDirectionalInput activeViewportSize viewState applyViewportDirection direction)
-      Just ToggleCell -> Just (toggleCursorCell viewState)
-      Just ToggleRunning -> Just viewState {isRunning = not (isRunning viewState)}
-      Just ToggleJumpMode -> Just viewState {isJumpMode = not (isJumpMode viewState)}
-      Just ConfirmJump -> Just (applyIfJumpMode viewState (applyJump activeViewportSize))
-      Just Quit -> Nothing
-      Nothing -> Just viewState
+tick :: EventM () ViewState ()
+tick = do
+  viewState <- get
+  when (isRunning viewState) $ do
+    let nextGeneration = generation viewState + 1
+    put viewState {generation = nextGeneration, board = Board.advanceBoard (board viewState)}
+    case generationLimit viewState of
+      Just limitCount | nextGeneration >= limitCount -> halt
+      _ -> pure ()
+
+keyToAction :: Key -> Maybe Action
+keyToAction key =
+  case key of
+    KChar c | toLower c == 'w' -> Just (MoveViewportAction MoveUp)
+    KChar c | toLower c == 's' -> Just (MoveViewportAction MoveDown)
+    KChar c | toLower c == 'a' -> Just (MoveViewportAction MoveLeft)
+    KChar c | toLower c == 'd' -> Just (MoveViewportAction MoveRight)
+    KChar c | toLower c == 'x' -> Just ToggleCellAction
+    KChar c | toLower c == 'g' -> Just ToggleJumpModeAction
+    KChar ' ' -> Just ToggleRunningAction
+    KEnter -> Just ConfirmJumpAction
+    KUp -> Just (MoveCursorAction MoveUp)
+    KDown -> Just (MoveCursorAction MoveDown)
+    KLeft -> Just (MoveCursorAction MoveLeft)
+    KRight -> Just (MoveCursorAction MoveRight)
+    _ -> Nothing
+
+applyAction :: ViewState -> Action -> ViewState
+applyAction viewState action =
+  case action of
+    MoveCursorAction direction -> applyDirectionalInput activeViewportSize viewState applyDirection direction
+    MoveViewportAction direction -> applyDirectionalInput activeViewportSize viewState applyViewportDirection direction
+    ToggleCellAction -> toggleCursorCell viewState
+    ToggleRunningAction -> viewState {isRunning = not (isRunning viewState)}
+    ToggleJumpModeAction -> viewState {isJumpMode = not (isJumpMode viewState)}
+    ConfirmJumpAction -> applyIfJumpMode viewState (applyJump activeViewportSize)
+  where
+    activeViewportSize = viewportSize viewState
 
 applyDirectionalInput :: (Int, Int) -> ViewState -> ((Int, Int) -> ViewState -> Direction -> ViewState) -> Direction -> ViewState
 applyDirectionalInput activeViewportSize viewState applyInNormalMode direction
@@ -198,27 +249,8 @@ applyJump (viewportWidth, viewportHeight) viewState =
         (viewportOrigin viewState)
         (jumpCursor viewState)
 
-refreshViewportSize :: ViewState -> IO (Int, Int)
-refreshViewportSize viewState = do
-  maybeWindow <- getTerminalSize
-  pure $
-    case maybeWindow of
-      Just window -> viewportSizeForWindow window
-      Nothing -> viewportSize viewState
-
-viewportSizeForWindow :: (Int, Int) -> (Int, Int)
-viewportSizeForWindow window =
-  case window of
-    (rows, columns) ->
-      ( max 20 ((columns - 28 - 8) `div` 2),
-        max 10 (rows - 7)
-      )
-
-advanceBoard :: ViewState -> ViewState
-advanceBoard viewState
-  | isRunning viewState =
-      viewState
-        { generation = generation viewState + 1,
-          board = Board.advanceBoard (board viewState)
-        }
-  | otherwise = viewState
+viewportSizeForWindow :: Int -> Int -> (Int, Int)
+viewportSizeForWindow width height =
+  ( max 20 ((width - 28 - 8) `div` 2),
+    max 10 (height - 7)
+  )

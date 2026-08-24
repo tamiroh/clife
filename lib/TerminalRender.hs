@@ -6,7 +6,23 @@ module TerminalRender
 where
 
 import Board (Board, Cell, isAlive, liveCells)
+import Brick.Types (Widget)
+import Brick.Widgets.Core (raw)
 import qualified Data.Set as Set
+import Graphics.Vty
+  ( Attr,
+    Color (Color240),
+    Image,
+    charFill,
+    defAttr,
+    horizCat,
+    reverseVideo,
+    string,
+    vertCat,
+    withBackColor,
+    withForeColor,
+    withStyle,
+  )
 
 maxMiniMapWidth :: Int
 maxMiniMapWidth = 28
@@ -17,19 +33,29 @@ maxMiniMapHeight = 14
 edgeHintDistance :: Int
 edgeHintDistance = 100
 
-renderLayout :: (Int, Int) -> Board -> Cell -> Cell -> Maybe Cell -> String
+liveAttr :: Attr
+liveAttr = defAttr `withForeColor` Color240 56
+
+viewportBgAttr :: Attr
+viewportBgAttr = defAttr `withBackColor` Color240 222
+
+liveViewportBgAttr :: Attr
+liveViewportBgAttr = defAttr `withForeColor` Color240 56 `withBackColor` Color240 222
+
+reverseAttr :: Attr
+reverseAttr = defAttr `withStyle` reverseVideo
+
+liveReverseAttr :: Attr
+liveReverseAttr = defAttr `withForeColor` Color240 56 `withStyle` reverseVideo
+
+renderLayout :: (Int, Int) -> Board -> Cell -> Cell -> Maybe Cell -> Widget n
 renderLayout viewportSize board viewport cursorPosition maybeJumpCursor =
-  unlines $
-    zipWith
-      (\boardRow miniMapRow -> boardRow ++ "    " ++ miniMapRow)
-      paddedBoardLines
-      paddedMiniMapLines
+  raw (horizCat [boardImage, gapImage, miniMapImage])
   where
-    boardLines = renderBoardLines viewportSize board viewport cursorPosition
-    miniMapLines = "Mini-map:" : renderMiniMapLines viewportSize board viewport maybeJumpCursor
-    totalRows = max (length boardLines) (length miniMapLines)
-    paddedBoardLines = padLines totalRows boardLines
-    paddedMiniMapLines = padLines totalRows miniMapLines
+    boardImage = renderBoardImage viewportSize board viewport cursorPosition
+    miniMapImage =
+      vertCat (string defAttr "Mini-map:" : renderMiniMapImages viewportSize board viewport maybeJumpCursor)
+    gapImage = charFill defAttr ' ' (4 :: Int) (1 :: Int)
 
 viewportCells :: (Int, Int) -> Cell -> [Cell]
 viewportCells (viewportWidth, viewportHeight) (viewportX, viewportY) =
@@ -38,54 +64,42 @@ viewportCells (viewportWidth, viewportHeight) (viewportX, viewportY) =
     y <- [viewportY .. viewportY + viewportHeight - 1]
   ]
 
-renderCell :: Board -> Cell -> Cell -> Cell -> String
-renderCell board viewport cursorPosition cell
-  | (originX + x, originY + y) == cursorPosition = highlight contents
-  | otherwise = contents
+renderCellImage :: Board -> Cell -> Cell -> Cell -> Image
+renderCellImage board viewport cursorPosition cell
+  | (originX + x, originY + y) == cursorPosition = string (cursorAttrFor alive) contents
+  | otherwise = string (attrFor alive) contents
   where
-    contents
-      | isAlive board (originX + x, originY + y) = liveCell "██"
-      | otherwise = "  "
     (originX, originY) = viewport
     (x, y) = cell
+    alive = isAlive board (originX + x, originY + y)
+    contents = if alive then "██" else "  "
 
-liveCell :: String -> String
-liveCell contents = "\ESC[38;5;72m" ++ contents ++ "\ESC[0m"
+attrFor :: Bool -> Attr
+attrFor alive = if alive then liveAttr else defAttr
 
-highlight :: String -> String
-highlight contents = "\ESC[7m" ++ contents ++ "\ESC[0m"
+cursorAttrFor :: Bool -> Attr
+cursorAttrFor alive = if alive then liveReverseAttr else reverseAttr
 
-highlightMiniMap :: String -> String
-highlightMiniMap contents = "\ESC[48;5;238m" ++ contents ++ "\ESC[0m"
-
-highlightJumpCursor :: String -> String
-highlightJumpCursor contents = "\ESC[7m" ++ contents ++ "\ESC[0m"
-
-renderBoardLines :: (Int, Int) -> Board -> Cell -> Cell -> [String]
-renderBoardLines (viewportWidth, viewportHeight) board viewport cursorPosition =
-  [topBorder]
-    ++ [showRow y | y <- [0 .. viewportHeight - 1]]
-    ++ [bottomBorder]
+renderBoardImage :: (Int, Int) -> Board -> Cell -> Cell -> Image
+renderBoardImage (viewportWidth, viewportHeight) board viewport cursorPosition =
+  vertCat ([topBorder] ++ [showRow y | y <- [0 .. viewportHeight - 1]] ++ [bottomBorder])
   where
     (viewportX, viewportY) = viewport
     topBorder =
-      "+"
-        ++ concat
-          [ borderSegment (hasAliveCellAlong (aboveCells x))
-          | x <- [0 .. viewportWidth - 1]
-          ]
-        ++ "+"
+      horizCat $
+        [string defAttr "+"]
+          ++ [borderSegment (hasAliveCellAlong (aboveCells x)) | x <- [0 .. viewportWidth - 1]]
+          ++ [string defAttr "+"]
     bottomBorder =
-      "+"
-        ++ concat
-          [ borderSegment (hasAliveCellAlong (belowCells x))
-          | x <- [0 .. viewportWidth - 1]
-          ]
-        ++ "+"
+      horizCat $
+        [string defAttr "+"]
+          ++ [borderSegment (hasAliveCellAlong (belowCells x)) | x <- [0 .. viewportWidth - 1]]
+          ++ [string defAttr "+"]
     showRow y =
-      leftBorder y
-        ++ concat [renderCell board viewport cursorPosition (x, y) | x <- [0 .. viewportWidth - 1]]
-        ++ rightBorder y
+      horizCat $
+        [leftBorder y]
+          ++ [renderCellImage board viewport cursorPosition (x, y) | x <- [0 .. viewportWidth - 1]]
+          ++ [rightBorder y]
     leftBorder y = edgeMarker (hasAliveCellAlong (leftCells y))
     rightBorder y = edgeMarker (hasAliveCellAlong (rightCells y))
     aboveCells x =
@@ -105,16 +119,12 @@ renderBoardLines (viewportWidth, viewportHeight) board viewport cursorPosition =
       | distance <- [1 .. edgeHintDistance]
       ]
     hasAliveCellAlong = any (isAlive board)
-    borderSegment shouldHighlight
-      | shouldHighlight = liveCell "--"
-      | otherwise = "--"
-    edgeMarker shouldHighlight
-      | shouldHighlight = liveCell "|"
-      | otherwise = "|"
+    borderSegment shouldHighlight = string (attrFor shouldHighlight) "--"
+    edgeMarker shouldHighlight = string (attrFor shouldHighlight) "|"
 
-renderMiniMapLines :: (Int, Int) -> Board -> Cell -> Maybe Cell -> [String]
-renderMiniMapLines viewportSize board viewport maybeJumpCursor
-  | Set.null (liveCells board) = ["(empty)"]
+renderMiniMapImages :: (Int, Int) -> Board -> Cell -> Maybe Cell -> [Image]
+renderMiniMapImages viewportSize board viewport maybeJumpCursor
+  | Set.null (liveCells board) = [string defAttr "(empty)"]
   | otherwise = [showMiniMapRow y | y <- [0 .. miniMapHeight - 1]]
   where
     boardCells = Set.toList (liveCells board)
@@ -127,8 +137,8 @@ renderMiniMapLines viewportSize board viewport maybeJumpCursor
     scaledCells = Set.fromList (map scaleCell boardCells)
     scaledViewportCells = Set.fromList (map scaleCell (viewportCells viewportSize viewport))
     showMiniMapRow y =
-      concat
-        [ showMiniMapCell
+      horizCat
+        [ showMiniMapCellImage
             x
             y
             scaledCells
@@ -137,15 +147,15 @@ renderMiniMapLines viewportSize board viewport maybeJumpCursor
         | x <- [0 .. miniMapWidth - 1]
         ]
 
-showMiniMapCell :: Int -> Int -> Set.Set Cell -> Set.Set Cell -> Maybe Cell -> String
-showMiniMapCell x y scaledCells scaledViewportCells maybeJumpCursor
-  | Just (x, y) == maybeJumpCursor = highlightJumpCursor contents
-  | (x, y) `Set.member` scaledViewportCells = highlightMiniMap contents
-  | otherwise = contents
+showMiniMapCellImage :: Int -> Int -> Set.Set Cell -> Set.Set Cell -> Maybe Cell -> Image
+showMiniMapCellImage x y scaledCells scaledViewportCells maybeJumpCursor
+  | Just (x, y) == maybeJumpCursor = string (cursorAttrFor alive) contents
+  | (x, y) `Set.member` scaledViewportCells = string (viewportAttrFor alive) contents
+  | otherwise = string (attrFor alive) contents
   where
-    contents
-      | (x, y) `Set.member` scaledCells = liveCell "#"
-      | otherwise = "."
+    alive = (x, y) `Set.member` scaledCells
+    contents = if alive then "#" else "."
+    viewportAttrFor isAliveCell = if isAliveCell then liveViewportBgAttr else viewportBgAttr
 
 miniMapBounds :: (Int, Int) -> [Cell] -> Cell -> (Cell, Cell)
 miniMapBounds (viewportWidth, viewportHeight) boardCells (viewportX, viewportY) =
@@ -200,7 +210,3 @@ miniMapSize spanX spanY
 ceilingDiv :: Int -> Int -> Int
 ceilingDiv numerator denominator =
   (numerator + denominator - 1) `div` denominator
-
-padLines :: Int -> [String] -> [String]
-padLines targetLength rows =
-  rows ++ replicate (targetLength - length rows) ""

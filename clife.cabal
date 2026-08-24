@@ -27,22 +27,25 @@ library
         LifeLike
         TerminalRender
         TerminalUI
-    other-modules:
-        TerminalControl
+    -- other-modules:
     -- other-extensions:
     build-depends:
         aeson,
-        ansi-terminal,
         base ^>=4.18.3.0,
+        brick,
         bytestring,
         containers,
-        text
+        mtl,
+        text,
+        vty,
+        vty-crossplatform
     hs-source-dirs:   lib
     default-language: Haskell2010
 
 executable clife
     import:           warnings
     main-is:          Main.hs
+    ghc-options:      -threaded
     -- other-modules:
     -- other-extensions:
     build-depends:
