@@ -227,7 +227,7 @@ drawUI viewState =
       [ str statusLine,
         renderLayout viewState,
         str "  [Arrow keys] Move cursor  [WASD] Move view  [X] Toggle cell  [Space] Run / Pause",
-        str "  [G] Jump mode  [Enter] Confirm jump",
+        str jumpModeHint,
         str "  [Q] Quit"
       ]
   ]
@@ -239,6 +239,10 @@ drawUI viewState =
         ++ (if isRunning viewState then "running" else "paused")
         ++ "  Mode: "
         ++ (if isJumpMode viewState then "jump" else "normal")
+    jumpModeHint =
+      if isJumpMode viewState
+        then "  [Enter] Confirm jump"
+        else "  [G] Jump mode"
 
 renderLayout :: ViewState -> Widget n
 renderLayout viewState =
