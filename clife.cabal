@@ -25,7 +25,7 @@ library
         BoardFile
         Board
         LifeLike
-        TerminalRender
+        MiniMap
         TerminalUI
     -- other-modules:
     -- other-extensions:

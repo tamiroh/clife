@@ -47,11 +47,11 @@ import Graphics.Vty
     withStyle,
   )
 import Graphics.Vty.CrossPlatform (mkVty)
-import TerminalRender
-  ( miniMapBounds,
-    miniMapSizeFor,
-    miniMapTargetCellFor,
-    scaleCoordinate,
+import MiniMap
+  ( miniMapProjectionFor,
+    miniMapSize,
+    projectCell,
+    unprojectCell,
   )
 
 ----------------------------------------------------------------------
@@ -175,7 +175,8 @@ moveJumpCursor activeViewportSize viewState direction =
     { jumpCursor = (clamp 0 (miniMapWidth - 1) nextX, clamp 0 (miniMapHeight - 1) nextY)
     }
   where
-    (miniMapWidth, miniMapHeight) = miniMapSizeFor activeViewportSize (board (simulation viewState)) (viewportOrigin viewState)
+    (miniMapWidth, miniMapHeight) =
+      miniMapSize (miniMapProjectionFor activeViewportSize (board (simulation viewState)) (viewportOrigin viewState))
     (nextX, nextY) = moveCursor (jumpCursor viewState) direction
     clamp lower upper value = max lower (min upper value)
 
@@ -188,10 +189,8 @@ applyJump (viewportWidth, viewportHeight) viewState =
     }
   where
     targetCell@(targetX, targetY) =
-      miniMapTargetCellFor
-        (viewportWidth, viewportHeight)
-        (board (simulation viewState))
-        (viewportOrigin viewState)
+      unprojectCell
+        (miniMapProjectionFor (viewportWidth, viewportHeight) (board (simulation viewState)) (viewportOrigin viewState))
         (jumpCursor viewState)
 
 ----------------------------------------------------------------------
@@ -318,15 +317,10 @@ renderMiniMapImages activeViewportSize renderedBoard viewport maybeJumpCursor
   | Set.null (liveCells renderedBoard) = [string defAttr "(empty)"]
   | otherwise = [showMiniMapRow y | y <- [0 .. miniMapHeight - 1]]
   where
-    boardCells = Set.toList (liveCells renderedBoard)
-    ((minX, minY), (spanX, spanY)) = miniMapBounds activeViewportSize boardCells viewport
-    (miniMapWidth, miniMapHeight) = miniMapSizeFor activeViewportSize renderedBoard viewport
-    scaleCell (x, y) =
-      ( scaleCoordinate x minX spanX miniMapWidth,
-        scaleCoordinate y minY spanY miniMapHeight
-      )
-    scaledCells = Set.fromList (map scaleCell boardCells)
-    scaledViewportCells = Set.fromList (map scaleCell (viewportCells activeViewportSize viewport))
+    projection = miniMapProjectionFor activeViewportSize renderedBoard viewport
+    (miniMapWidth, miniMapHeight) = miniMapSize projection
+    scaledCells = Set.fromList (map (projectCell projection) (Set.toList (liveCells renderedBoard)))
+    scaledViewportCells = Set.fromList (map (projectCell projection) (viewportCells activeViewportSize viewport))
     showMiniMapRow y =
       horizCat
         [ showMiniMapCellImage
