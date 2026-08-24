@@ -1,161 +1,19 @@
 module TerminalRender
-  ( miniMapSizeFor,
+  ( miniMapBounds,
+    miniMapSizeFor,
     miniMapTargetCellFor,
-    renderLayout,
+    scaleCoordinate,
   )
 where
 
-import Board (Board, Cell, isAlive, liveCells)
-import Brick.Types (Widget)
-import Brick.Widgets.Core (raw)
+import Board (Board, Cell, liveCells)
 import qualified Data.Set as Set
-import Graphics.Vty
-  ( Attr,
-    Color (Color240),
-    Image,
-    charFill,
-    defAttr,
-    horizCat,
-    reverseVideo,
-    string,
-    vertCat,
-    withBackColor,
-    withForeColor,
-    withStyle,
-  )
 
 maxMiniMapWidth :: Int
 maxMiniMapWidth = 28
 
 maxMiniMapHeight :: Int
 maxMiniMapHeight = 14
-
-edgeHintDistance :: Int
-edgeHintDistance = 100
-
-liveAttr :: Attr
-liveAttr = defAttr `withForeColor` Color240 56
-
-viewportBgAttr :: Attr
-viewportBgAttr = defAttr `withBackColor` Color240 222
-
-liveViewportBgAttr :: Attr
-liveViewportBgAttr = defAttr `withForeColor` Color240 56 `withBackColor` Color240 222
-
-reverseAttr :: Attr
-reverseAttr = defAttr `withStyle` reverseVideo
-
-liveReverseAttr :: Attr
-liveReverseAttr = defAttr `withForeColor` Color240 56 `withStyle` reverseVideo
-
-renderLayout :: (Int, Int) -> Board -> Cell -> Cell -> Maybe Cell -> Widget n
-renderLayout viewportSize board viewport cursorPosition maybeJumpCursor =
-  raw (horizCat [boardImage, gapImage, miniMapImage])
-  where
-    boardImage = renderBoardImage viewportSize board viewport cursorPosition
-    miniMapImage =
-      vertCat (string defAttr "Mini-map:" : renderMiniMapImages viewportSize board viewport maybeJumpCursor)
-    gapImage = charFill defAttr ' ' (4 :: Int) (1 :: Int)
-
-viewportCells :: (Int, Int) -> Cell -> [Cell]
-viewportCells (viewportWidth, viewportHeight) (viewportX, viewportY) =
-  [ (x, y)
-  | x <- [viewportX .. viewportX + viewportWidth - 1],
-    y <- [viewportY .. viewportY + viewportHeight - 1]
-  ]
-
-renderCellImage :: Board -> Cell -> Cell -> Cell -> Image
-renderCellImage board viewport cursorPosition cell
-  | (originX + x, originY + y) == cursorPosition = string (cursorAttrFor alive) contents
-  | otherwise = string (attrFor alive) contents
-  where
-    (originX, originY) = viewport
-    (x, y) = cell
-    alive = isAlive board (originX + x, originY + y)
-    contents = if alive then "██" else "  "
-
-attrFor :: Bool -> Attr
-attrFor alive = if alive then liveAttr else defAttr
-
-cursorAttrFor :: Bool -> Attr
-cursorAttrFor alive = if alive then liveReverseAttr else reverseAttr
-
-renderBoardImage :: (Int, Int) -> Board -> Cell -> Cell -> Image
-renderBoardImage (viewportWidth, viewportHeight) board viewport cursorPosition =
-  vertCat ([topBorder] ++ [showRow y | y <- [0 .. viewportHeight - 1]] ++ [bottomBorder])
-  where
-    (viewportX, viewportY) = viewport
-    topBorder =
-      horizCat $
-        [string defAttr "+"]
-          ++ [borderSegment (hasAliveCellAlong (aboveCells x)) | x <- [0 .. viewportWidth - 1]]
-          ++ [string defAttr "+"]
-    bottomBorder =
-      horizCat $
-        [string defAttr "+"]
-          ++ [borderSegment (hasAliveCellAlong (belowCells x)) | x <- [0 .. viewportWidth - 1]]
-          ++ [string defAttr "+"]
-    showRow y =
-      horizCat $
-        [leftBorder y]
-          ++ [renderCellImage board viewport cursorPosition (x, y) | x <- [0 .. viewportWidth - 1]]
-          ++ [rightBorder y]
-    leftBorder y = edgeMarker (hasAliveCellAlong (leftCells y))
-    rightBorder y = edgeMarker (hasAliveCellAlong (rightCells y))
-    aboveCells x =
-      [ (viewportX + x, viewportY - distance)
-      | distance <- [1 .. edgeHintDistance]
-      ]
-    belowCells x =
-      [ (viewportX + x, viewportY + viewportHeight + distance - 1)
-      | distance <- [1 .. edgeHintDistance]
-      ]
-    leftCells y =
-      [ (viewportX - distance, viewportY + y)
-      | distance <- [1 .. edgeHintDistance]
-      ]
-    rightCells y =
-      [ (viewportX + viewportWidth + distance - 1, viewportY + y)
-      | distance <- [1 .. edgeHintDistance]
-      ]
-    hasAliveCellAlong = any (isAlive board)
-    borderSegment shouldHighlight = string (attrFor shouldHighlight) "--"
-    edgeMarker shouldHighlight = string (attrFor shouldHighlight) "|"
-
-renderMiniMapImages :: (Int, Int) -> Board -> Cell -> Maybe Cell -> [Image]
-renderMiniMapImages viewportSize board viewport maybeJumpCursor
-  | Set.null (liveCells board) = [string defAttr "(empty)"]
-  | otherwise = [showMiniMapRow y | y <- [0 .. miniMapHeight - 1]]
-  where
-    boardCells = Set.toList (liveCells board)
-    ((minX, minY), (spanX, spanY)) = miniMapBounds viewportSize boardCells viewport
-    (miniMapWidth, miniMapHeight) = miniMapSizeFor viewportSize board viewport
-    scaleCell (x, y) =
-      ( scaleCoordinate x minX spanX miniMapWidth,
-        scaleCoordinate y minY spanY miniMapHeight
-      )
-    scaledCells = Set.fromList (map scaleCell boardCells)
-    scaledViewportCells = Set.fromList (map scaleCell (viewportCells viewportSize viewport))
-    showMiniMapRow y =
-      horizCat
-        [ showMiniMapCellImage
-            x
-            y
-            scaledCells
-            scaledViewportCells
-            maybeJumpCursor
-        | x <- [0 .. miniMapWidth - 1]
-        ]
-
-showMiniMapCellImage :: Int -> Int -> Set.Set Cell -> Set.Set Cell -> Maybe Cell -> Image
-showMiniMapCellImage x y scaledCells scaledViewportCells maybeJumpCursor
-  | Just (x, y) == maybeJumpCursor = string (cursorAttrFor alive) contents
-  | (x, y) `Set.member` scaledViewportCells = string (viewportAttrFor alive) contents
-  | otherwise = string (attrFor alive) contents
-  where
-    alive = (x, y) `Set.member` scaledCells
-    contents = if alive then "#" else "."
-    viewportAttrFor isAliveCell = if isAliveCell then liveViewportBgAttr else viewportBgAttr
 
 miniMapBounds :: (Int, Int) -> [Cell] -> Cell -> (Cell, Cell)
 miniMapBounds (viewportWidth, viewportHeight) boardCells (viewportX, viewportY) =
