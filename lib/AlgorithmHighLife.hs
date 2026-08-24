@@ -1,10 +1,9 @@
 module AlgorithmHighLife
-  ( algorithmImpl,
+  ( rules,
   )
 where
 
-import AlgorithmImpl (AlgorithmImpl (..))
-import LifeLike (Rules (..), nextBoardWithRules)
+import LifeLike (Rules (..))
 
 rules :: Rules
 rules =
@@ -12,6 +11,3 @@ rules =
     { surviveWhenNeighborsAre = [2, 3],
       birthWhenNeighborsAre = [3, 6]
     }
-
-algorithmImpl :: AlgorithmImpl
-algorithmImpl = AlgorithmImpl {nextBoard = nextBoardWithRules rules}

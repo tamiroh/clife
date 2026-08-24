@@ -6,13 +6,13 @@ module BoardFile
   )
 where
 
-import Algorithm (Algorithm (..), algorithmImplFor)
-import AlgorithmImpl (nextBoard)
+import Algorithm (Algorithm (..), rulesFor)
 import Board (Board, Cell, makeBoard)
 import Data.Aeson (FromJSON (parseJSON), eitherDecode)
 import Data.Aeson.Types (Parser, withObject, (.:))
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as Text
+import LifeLike (nextBoardWithRules)
 
 data BoardPayload = BoardPayload
   { payloadAlgorithm :: Algorithm,
@@ -40,5 +40,5 @@ parseBoard input =
   case eitherDecode input of
     Left message -> Left ("Invalid JSON: " ++ message)
     Right payload ->
-      let nextBoardFn = nextBoard (algorithmImplFor (payloadAlgorithm payload))
+      let nextBoardFn = nextBoardWithRules (rulesFor (payloadAlgorithm payload))
        in Right $ makeBoard nextBoardFn (payloadCells payload)

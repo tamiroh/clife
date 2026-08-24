@@ -1,19 +1,19 @@
 module Algorithm
   ( Algorithm (..),
-    algorithmImplFor,
+    rulesFor,
   )
 where
 
 import qualified AlgorithmConway
 import qualified AlgorithmHighLife
-import AlgorithmImpl (AlgorithmImpl)
+import LifeLike (Rules)
 
 data Algorithm
   = Conway
   | HighLife
 
-algorithmImplFor :: Algorithm -> AlgorithmImpl
-algorithmImplFor algorithm =
+rulesFor :: Algorithm -> Rules
+rulesFor algorithm =
   case algorithm of
-    Conway -> AlgorithmConway.algorithmImpl
-    HighLife -> AlgorithmHighLife.algorithmImpl
+    Conway -> AlgorithmConway.rules
+    HighLife -> AlgorithmHighLife.rules

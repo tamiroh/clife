@@ -21,7 +21,6 @@ library
         Algorithm
         AlgorithmConway
         AlgorithmHighLife
-        AlgorithmImpl
         BoardFile
         Board
         LifeLike
