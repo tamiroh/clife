@@ -19,8 +19,6 @@ library
     import:           warnings
     exposed-modules:
         Algorithm
-        AlgorithmConway
-        AlgorithmHighLife
         BoardFile
         Board
         LifeLike
