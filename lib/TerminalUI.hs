@@ -39,6 +39,22 @@ import TerminalRender
     renderLayout,
   )
 
+----------------------------------------------------------------------
+-- State
+----------------------------------------------------------------------
+
+data ViewState = ViewState
+  { isRunning :: Bool,
+    isJumpMode :: Bool,
+    jumpCursor :: Cell,
+    viewportSize :: (Int, Int),
+    generation :: Int,
+    generationLimit :: Maybe Int,
+    viewportOrigin :: Cell,
+    cursor :: Cell,
+    board :: Board
+  }
+
 data Direction
   = MoveUp
   | MoveDown
@@ -55,98 +71,16 @@ data Action
 
 data ClifeEvent = Tick
 
-data ViewState = ViewState
-  { isRunning :: Bool,
-    isJumpMode :: Bool,
-    jumpCursor :: Cell,
-    viewportSize :: (Int, Int),
-    generation :: Int,
-    generationLimit :: Maybe Int,
-    viewportOrigin :: Cell,
-    cursor :: Cell,
-    board :: Board
-  }
+----------------------------------------------------------------------
+-- Update
+----------------------------------------------------------------------
 
-animateGenerations :: Maybe Int -> Int -> Board -> IO ()
-animateGenerations maybeGenerationLimit frameDelayInMicroseconds initialBoard = do
-  eventChannel <- newBChan 10
-  _ <- forkIO $ forever $ do
-    threadDelay frameDelayInMicroseconds
-    writeBChan eventChannel Tick
-  initialVty <- buildVty
-  _ <- customMain initialVty buildVty (Just eventChannel) clifeApp initialViewState
-  pure ()
-  where
-    buildVty = mkVty defaultConfig
-    initialViewState =
-      ViewState
-        { isRunning = True,
-          isJumpMode = False,
-          jumpCursor = (0, 0),
-          viewportSize = (40, 20),
-          generation = 0,
-          generationLimit = maybeGenerationLimit,
-          viewportOrigin = (0, 0),
-          cursor = (0, 0),
-          board = initialBoard
-        }
-
-clifeApp :: App ViewState ClifeEvent ()
-clifeApp =
-  App
-    { appDraw = drawUI,
-      appChooseCursor = neverShowCursor,
-      appHandleEvent = handleClifeEvent,
-      appStartEvent = initializeViewportSize,
-      appAttrMap = const (attrMap defAttr [])
+advanceGeneration :: ViewState -> ViewState
+advanceGeneration viewState =
+  viewState
+    { generation = generation viewState + 1,
+      board = Board.advanceBoard (board viewState)
     }
-
-initializeViewportSize :: EventM () ViewState ()
-initializeViewportSize = do
-  vty <- getVtyHandle
-  (width, height) <- liftIO (displayBounds (outputIface vty))
-  modify (\viewState -> viewState {viewportSize = viewportSizeForWindow width height})
-
-drawUI :: ViewState -> [Widget ()]
-drawUI viewState =
-  [ vBox
-      [ str statusLine,
-        renderLayout (viewportSize viewState) (board viewState) (viewportOrigin viewState) (cursor viewState) maybeJumpCursor,
-        str "  [Arrow keys] Move cursor  [WASD] Move view  [X] Toggle cell  [Space] Run / Pause",
-        str "  [G] Jump mode  [Enter] Confirm jump",
-        str "  [Q] Quit"
-      ]
-  ]
-  where
-    statusLine =
-      "Generation "
-        ++ show (generation viewState)
-        ++ "  Status: "
-        ++ (if isRunning viewState then "running" else "paused")
-        ++ "  Mode: "
-        ++ (if isJumpMode viewState then "jump" else "normal")
-    maybeJumpCursor = if isJumpMode viewState then Just (jumpCursor viewState) else Nothing
-
-handleClifeEvent :: BrickEvent () ClifeEvent -> EventM () ViewState ()
-handleClifeEvent (AppEvent Tick) = tick
-handleClifeEvent (VtyEvent (EvResize width height)) =
-  modify (\viewState -> viewState {viewportSize = viewportSizeForWindow width height})
-handleClifeEvent (VtyEvent (EvKey (KChar c) _)) | toLower c == 'q' = halt
-handleClifeEvent (VtyEvent (EvKey key _)) =
-  case keyToAction key of
-    Nothing -> pure ()
-    Just action -> modify (`applyAction` action)
-handleClifeEvent _ = pure ()
-
-tick :: EventM () ViewState ()
-tick = do
-  viewState <- get
-  when (isRunning viewState) $ do
-    let nextGeneration = generation viewState + 1
-    put viewState {generation = nextGeneration, board = Board.advanceBoard (board viewState)}
-    case generationLimit viewState of
-      Just limitCount | nextGeneration >= limitCount -> halt
-      _ -> pure ()
 
 keyToAction :: Key -> Maybe Action
 keyToAction key =
@@ -248,6 +182,95 @@ applyJump (viewportWidth, viewportHeight) viewState =
         (board viewState)
         (viewportOrigin viewState)
         (jumpCursor viewState)
+
+----------------------------------------------------------------------
+-- View
+----------------------------------------------------------------------
+
+drawUI :: ViewState -> [Widget ()]
+drawUI viewState =
+  [ vBox
+      [ str statusLine,
+        renderLayout (viewportSize viewState) (board viewState) (viewportOrigin viewState) (cursor viewState) maybeJumpCursor,
+        str "  [Arrow keys] Move cursor  [WASD] Move view  [X] Toggle cell  [Space] Run / Pause",
+        str "  [G] Jump mode  [Enter] Confirm jump",
+        str "  [Q] Quit"
+      ]
+  ]
+  where
+    statusLine =
+      "Generation "
+        ++ show (generation viewState)
+        ++ "  Status: "
+        ++ (if isRunning viewState then "running" else "paused")
+        ++ "  Mode: "
+        ++ (if isJumpMode viewState then "jump" else "normal")
+    maybeJumpCursor = if isJumpMode viewState then Just (jumpCursor viewState) else Nothing
+
+----------------------------------------------------------------------
+-- App wiring
+----------------------------------------------------------------------
+
+animateGenerations :: Maybe Int -> Int -> Board -> IO ()
+animateGenerations maybeGenerationLimit frameDelayInMicroseconds initialBoard = do
+  eventChannel <- newBChan 10
+  _ <- forkIO $ forever $ do
+    threadDelay frameDelayInMicroseconds
+    writeBChan eventChannel Tick
+  initialVty <- buildVty
+  _ <- customMain initialVty buildVty (Just eventChannel) clifeApp initialViewState
+  pure ()
+  where
+    buildVty = mkVty defaultConfig
+    initialViewState =
+      ViewState
+        { isRunning = True,
+          isJumpMode = False,
+          jumpCursor = (0, 0),
+          viewportSize = (40, 20),
+          generation = 0,
+          generationLimit = maybeGenerationLimit,
+          viewportOrigin = (0, 0),
+          cursor = (0, 0),
+          board = initialBoard
+        }
+
+clifeApp :: App ViewState ClifeEvent ()
+clifeApp =
+  App
+    { appDraw = drawUI,
+      appChooseCursor = neverShowCursor,
+      appHandleEvent = handleClifeEvent,
+      appStartEvent = initializeViewportSize,
+      appAttrMap = const (attrMap defAttr [])
+    }
+
+initializeViewportSize :: EventM () ViewState ()
+initializeViewportSize = do
+  vty <- getVtyHandle
+  (width, height) <- liftIO (displayBounds (outputIface vty))
+  modify (\viewState -> viewState {viewportSize = viewportSizeForWindow width height})
+
+handleClifeEvent :: BrickEvent () ClifeEvent -> EventM () ViewState ()
+handleClifeEvent (AppEvent Tick) = tick
+handleClifeEvent (VtyEvent (EvResize width height)) =
+  modify (\viewState -> viewState {viewportSize = viewportSizeForWindow width height})
+handleClifeEvent (VtyEvent (EvKey (KChar c) _)) | toLower c == 'q' = halt
+handleClifeEvent (VtyEvent (EvKey key _)) =
+  case keyToAction key of
+    Nothing -> pure ()
+    Just action -> modify (`applyAction` action)
+handleClifeEvent _ = pure ()
+
+tick :: EventM () ViewState ()
+tick = do
+  viewState <- get
+  when (isRunning viewState) $ do
+    let nextViewState = advanceGeneration viewState
+    put nextViewState
+    case generationLimit nextViewState of
+      Just limitCount | generation nextViewState >= limitCount -> halt
+      _ -> pure ()
 
 viewportSizeForWindow :: Int -> Int -> (Int, Int)
 viewportSizeForWindow width height =
