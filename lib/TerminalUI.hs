@@ -1,5 +1,6 @@
 module TerminalUI
-  ( animateGenerations,
+  ( RunConfig (..),
+    animateGenerations,
   )
 where
 
@@ -55,6 +56,17 @@ data ViewState = ViewState
     board :: Board
   }
 
+advanceGeneration :: ViewState -> ViewState
+advanceGeneration viewState =
+  viewState
+    { generation = generation viewState + 1,
+      board = Board.advanceBoard (board viewState)
+    }
+
+----------------------------------------------------------------------
+-- Key action
+----------------------------------------------------------------------
+
 data Direction
   = MoveUp
   | MoveDown
@@ -68,19 +80,6 @@ data Action
   | ToggleRunningAction
   | ToggleJumpModeAction
   | ConfirmJumpAction
-
-data ClifeEvent = Tick
-
-----------------------------------------------------------------------
--- Update
-----------------------------------------------------------------------
-
-advanceGeneration :: ViewState -> ViewState
-advanceGeneration viewState =
-  viewState
-    { generation = generation viewState + 1,
-      board = Board.advanceBoard (board viewState)
-    }
 
 keyToAction :: Key -> Maybe Action
 keyToAction key =
@@ -202,11 +201,18 @@ drawUI viewState =
 -- App wiring
 ----------------------------------------------------------------------
 
-animateGenerations :: Maybe Int -> Int -> Board -> IO ()
-animateGenerations maybeGenerationLimit frameDelayInMicroseconds initialBoard = do
+data ClifeEvent = Tick
+
+data RunConfig = RunConfig
+  { runGenerationLimit :: Maybe Int,
+    runFrameDelayMicroseconds :: Int
+  }
+
+animateGenerations :: RunConfig -> Board -> IO ()
+animateGenerations runConfig initialBoard = do
   eventChannel <- newBChan 10
   _ <- forkIO $ forever $ do
-    threadDelay frameDelayInMicroseconds
+    threadDelay (runFrameDelayMicroseconds runConfig)
     writeBChan eventChannel Tick
   initialVty <- buildVty
   _ <- customMain initialVty buildVty (Just eventChannel) clifeApp initialViewState
@@ -220,7 +226,7 @@ animateGenerations maybeGenerationLimit frameDelayInMicroseconds initialBoard = 
           jumpCursor = (0, 0),
           viewportSize = (40, 20),
           generation = 0,
-          generationLimit = maybeGenerationLimit,
+          generationLimit = runGenerationLimit runConfig,
           viewportOrigin = (0, 0),
           cursor = (0, 0),
           board = initialBoard
