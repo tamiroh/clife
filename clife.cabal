@@ -23,6 +23,7 @@ library
         Board
         LifeLike
         MiniMap
+        RleFile
         TerminalUI
     -- other-modules:
     -- other-extensions:
@@ -47,7 +48,8 @@ executable clife
     -- other-extensions:
     build-depends:
         base ^>=4.18.3.0,
-        clife
+        clife,
+        filepath
 
     hs-source-dirs:   app
     default-language: Haskell2010
