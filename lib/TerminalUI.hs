@@ -44,24 +44,31 @@ import TerminalRender
 -- State
 ----------------------------------------------------------------------
 
+data Simulation = Simulation
+  { generation :: Int,
+    board :: Board
+  }
+
+advanceGeneration :: Simulation -> Simulation
+advanceGeneration currentSimulation =
+  currentSimulation
+    { generation = generation currentSimulation + 1,
+      board = Board.advanceBoard (board currentSimulation)
+    }
+
+toggleCellAt :: Cell -> Simulation -> Simulation
+toggleCellAt cell currentSimulation = currentSimulation {board = toggleCell (board currentSimulation) cell}
+
 data ViewState = ViewState
   { isRunning :: Bool,
     isJumpMode :: Bool,
     jumpCursor :: Cell,
     viewportSize :: (Int, Int),
-    generation :: Int,
     generationLimit :: Maybe Int,
     viewportOrigin :: Cell,
     cursor :: Cell,
-    board :: Board
+    simulation :: Simulation
   }
-
-advanceGeneration :: ViewState -> ViewState
-advanceGeneration viewState =
-  viewState
-    { generation = generation viewState + 1,
-      board = Board.advanceBoard (board viewState)
-    }
 
 ----------------------------------------------------------------------
 -- Key action
@@ -103,7 +110,7 @@ applyAction viewState action =
   case action of
     MoveCursorAction direction -> applyDirectionalInput activeViewportSize viewState applyDirection direction
     MoveViewportAction direction -> applyDirectionalInput activeViewportSize viewState applyViewportDirection direction
-    ToggleCellAction -> viewState {board = toggleCell (board viewState) (cursor viewState)}
+    ToggleCellAction -> viewState {simulation = toggleCellAt (cursor viewState) (simulation viewState)}
     ToggleRunningAction -> viewState {isRunning = not (isRunning viewState)}
     ToggleJumpModeAction -> viewState {isJumpMode = not (isJumpMode viewState)}
     ConfirmJumpAction
@@ -154,7 +161,7 @@ moveJumpCursor activeViewportSize viewState direction =
     { jumpCursor = (clamp 0 (miniMapWidth - 1) nextX, clamp 0 (miniMapHeight - 1) nextY)
     }
   where
-    (miniMapWidth, miniMapHeight) = miniMapSizeFor activeViewportSize (board viewState) (viewportOrigin viewState)
+    (miniMapWidth, miniMapHeight) = miniMapSizeFor activeViewportSize (board (simulation viewState)) (viewportOrigin viewState)
     (nextX, nextY) = moveCursor (jumpCursor viewState) direction
     clamp lower upper value = max lower (min upper value)
 
@@ -169,7 +176,7 @@ applyJump (viewportWidth, viewportHeight) viewState =
     targetCell@(targetX, targetY) =
       miniMapTargetCellFor
         (viewportWidth, viewportHeight)
-        (board viewState)
+        (board (simulation viewState))
         (viewportOrigin viewState)
         (jumpCursor viewState)
 
@@ -181,7 +188,7 @@ drawUI :: ViewState -> [Widget ()]
 drawUI viewState =
   [ vBox
       [ str statusLine,
-        renderLayout (viewportSize viewState) (board viewState) (viewportOrigin viewState) (cursor viewState) maybeJumpCursor,
+        renderLayout (viewportSize viewState) (board (simulation viewState)) (viewportOrigin viewState) (cursor viewState) maybeJumpCursor,
         str "  [Arrow keys] Move cursor  [WASD] Move view  [X] Toggle cell  [Space] Run / Pause",
         str "  [G] Jump mode  [Enter] Confirm jump",
         str "  [Q] Quit"
@@ -190,7 +197,7 @@ drawUI viewState =
   where
     statusLine =
       "Generation "
-        ++ show (generation viewState)
+        ++ show (generation (simulation viewState))
         ++ "  Status: "
         ++ (if isRunning viewState then "running" else "paused")
         ++ "  Mode: "
@@ -225,11 +232,10 @@ animateGenerations runConfig initialBoard = do
           isJumpMode = False,
           jumpCursor = (0, 0),
           viewportSize = (40, 20),
-          generation = 0,
           generationLimit = runGenerationLimit runConfig,
           viewportOrigin = (0, 0),
           cursor = (0, 0),
-          board = initialBoard
+          simulation = Simulation {generation = 0, board = initialBoard}
         }
 
 clifeApp :: App ViewState ClifeEvent ()
@@ -263,10 +269,10 @@ tick :: EventM () ViewState ()
 tick = do
   viewState <- get
   when (isRunning viewState) $ do
-    let nextViewState = advanceGeneration viewState
+    let nextViewState = viewState {simulation = advanceGeneration (simulation viewState)}
     put nextViewState
     case generationLimit nextViewState of
-      Just limitCount | generation nextViewState >= limitCount -> halt
+      Just limitCount | generation (simulation nextViewState) >= limitCount -> halt
       _ -> pure ()
 
 viewportSizeForWindow :: Int -> Int -> (Int, Int)
